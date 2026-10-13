@@ -113,6 +113,7 @@ type Info struct {
 	MarketCapUSD *float64 `json:"market_cap_usd"`
 	HolderCount  *int64   `json:"holder_count"`
 	Top10Share   *float64 `json:"top10_share"`
+	LogoURL      *string  `json:"logo_url"`
 	Sources      []string `json:"sources"`
 	Coverage     []string `json:"coverage"`
 }
@@ -192,20 +193,23 @@ type Note struct {
 }
 
 var (
-	CovNoPrice        = Note{"token_price_unknown", "The prices service has no price for this token, so price_usd and fdv_usd are null."}
-	CovSourceDown     = Note{"token_source_unavailable", "A data source did not answer, so the fields it feeds are null. sources lists the ones that answered."}
-	CovMultichainCap  = Note{"token_market_cap_multichain", "The provider's market cap is above this chain's fully diluted value, so it counts the token's supply on other chains too."}
-	CovIndexPartial   = Note{"token_index_partial", "The index of this token is still being built, so the list holds what is indexed so far, up to index.indexed_block."}
-	CovIndexFull      = Note{"token_index_unavailable", "The index cannot take this token now (it holds the most tokens it may, or its backfill failed and waits for a retry), so the list is empty."}
-	CovFromActivity   = Note{"token_holders_from_activity", "The token's full history is too long to index on the free HyperSync quota, so the index follows the addresses active since index.start_block and reads their balances with balanceOf. A holder that has not moved the token since then is missing."}
-	CovFromTransfers  = Note{"token_balances_from_transfers", "Balances are the sum of the token's Transfer events (and Deposit and Withdrawal for wrapped MON). A token that changes balances without events, such as a rebasing token, drifts from balanceOf."}
-	CovWindowCut      = Note{"token_transfer_window_cut", "The token is busy, so the window is shorter than the default to stay within the HyperSync quota. window gives its blocks and times."}
-	CovGeckoHolders   = Note{"token_holder_count_provider", "holder_count and top10_share come from GeckoTerminal, which updates them on its own schedule."}
-	CovHoldersPartial = Note{"token_holders_ranked_by_provider", "Holders, their order and holder_count come from Blockscout's index, read when the page was fetched and kept for up to 10 minutes."}
+	CovNoPrice            = Note{"token_price_unknown", "The prices service has no price for this token, so price_usd and fdv_usd are null."}
+	CovSourceDown         = Note{"token_source_unavailable", "A data source did not answer, so the fields it feeds are null. sources lists the ones that answered."}
+	CovMultichainCap      = Note{"token_market_cap_multichain", "The provider's market cap is above this chain's fully diluted value, so it counts the token's supply on other chains too."}
+	CovIndexPartial       = Note{"token_index_partial", "The index of this token is still being built, so the list holds what is indexed so far, up to index.indexed_block."}
+	CovIndexFull          = Note{"token_index_unavailable", "The index cannot take this token now (it holds the most tokens it may, or its backfill failed and waits for a retry), so the list is empty."}
+	CovFromActivity       = Note{"token_holders_from_activity", "The token's full history is too long to index on the free HyperSync quota, so the index follows the addresses active since index.start_block and reads their balances with balanceOf. A holder that has not moved the token since then is missing."}
+	CovFromTransfers      = Note{"token_balances_from_transfers", "Balances are the sum of the token's Transfer events (and Deposit and Withdrawal for wrapped MON). A token that changes balances without events, such as a rebasing token, drifts from balanceOf."}
+	CovWindowCut          = Note{"token_transfer_window_cut", "The token is busy, so the window is shorter than the default to stay within the HyperSync quota. window gives its blocks and times."}
+	CovGeckoHolders       = Note{"token_holder_count_provider", "holder_count and top10_share come from GeckoTerminal, which updates them on its own schedule."}
+	CovSearchListDown     = Note{"token_search_list_unavailable", "A curated token list has not loaded yet, so verified tokens from it may be missing from the search."}
+	CovSearchLongTailDown = Note{"token_search_long_tail_unavailable", "GeckoTerminal did not answer in time for a chain, so tokens that are on no curated list may be missing from the search."}
+	CovSearchUnverified   = Note{"token_search_unverified", "Tokens with verified false are on no curated list. Anyone can deploy a token with any name, so check the address. They are ranked by the pool liquidity GeckoTerminal reports, or not at all when it reports none."}
+	CovHoldersPartial     = Note{"token_holders_ranked_by_provider", "Holders, their order and holder_count come from Blockscout's index, read when the page was fetched and kept for up to 10 minutes."}
 )
 
 // AllNotes is every coverage code the engine can state, in the order the status lists them
-var AllNotes = []Note{CovNoPrice, CovSourceDown, CovMultichainCap, CovIndexPartial, CovIndexFull, CovFromActivity, CovFromTransfers, CovWindowCut, CovGeckoHolders, CovHoldersPartial}
+var AllNotes = []Note{CovNoPrice, CovSourceDown, CovMultichainCap, CovIndexPartial, CovIndexFull, CovFromActivity, CovFromTransfers, CovWindowCut, CovGeckoHolders, CovHoldersPartial, CovSearchListDown, CovSearchLongTailDown, CovSearchUnverified}
 
 func codes(ns ...Note) []string {
 	out := make([]string, 0, len(ns))

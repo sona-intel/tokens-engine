@@ -40,6 +40,7 @@ type Blockscout interface {
 type Gecko interface {
 	Holders(ctx context.Context, token evm.Address) (sources.GeckoHolders, error)
 	MarketCap(ctx context.Context, token evm.Address) (*float64, error)
+	Search(ctx context.Context, network, query string) ([]sources.GeckoHit, error)
 }
 
 type Prices interface {
@@ -64,6 +65,7 @@ type Index interface {
 type IndexStore interface {
 	Holders(ctx context.Context, id int32, limit int, after *store.HolderCursor) ([]store.Balance, error)
 	TopTransfers(ctx context.Context, id int32, fromDay string, limit int) ([]store.Transfer, error)
+	IndexedTokens(ctx context.Context, chain string) ([]evm.Address, error)
 }
 
 type Deps struct {
@@ -75,7 +77,9 @@ type Deps struct {
 	Logs       Logs
 	Index      Index
 	Store      IndexStore
-	Now        func() time.Time
+	// Lists are the curated token lists, nil for none
+	Lists *Lists
+	Now   func() time.Time
 }
 
 // Meta is what the token contract itself answers
@@ -99,6 +103,8 @@ type Service struct {
 	windows   *cache.Cache[ethWindow]
 	headers   *cache.Cache[rpc.Header]
 	blockAt   *cache.Cache[uint64]
+	gtSearch  *cache.Cache[[]sources.GeckoHit]
+	idxMeta   *cache.Cache[Meta]
 
 	// learned is the transfer window that fit the HyperSync budget last time, per Ethereum token
 	learned sync.Map
@@ -119,6 +125,8 @@ func New(d Deps) *Service {
 		windows:   cache.New[ethWindow](1024, 2*fetchTimeout),
 		headers:   cache.New[rpc.Header](cacheEntries, fetchTimeout),
 		blockAt:   cache.New[uint64](64, fetchTimeout),
+		gtSearch:  cache.New[[]sources.GeckoHit](512, searchFetch),
+		idxMeta:   cache.New[Meta](cacheEntries, fetchTimeout),
 	}
 }
 
@@ -280,6 +288,7 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 		count                *int64
 		top10                *float64
 		indexCount           *int64
+		providerLogo         *string
 	)
 	wg.Go(func() { price, priceErr = s.currentPrice(ctx, chain, token) })
 	if cfg.Holders == config.HoldersBlockscout {
@@ -290,7 +299,7 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 			}
 			mcapErr = err
 			if err == nil {
-				mcap, count = t.CirculatingMarketCap, t.HoldersCount
+				mcap, count, providerLogo = t.CirculatingMarketCap, t.HoldersCount, t.IconURL
 			}
 		})
 		wg.Go(func() {
@@ -310,7 +319,7 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 				err = nil
 			}
 			holdersErr = err
-			count, top10 = h.Count, h.Top10Share
+			count, top10, providerLogo = h.Count, h.Top10Share, h.ImageURL
 		})
 		wg.Go(func() {
 			v, err := s.geckoCap(ctx, token)
@@ -330,6 +339,10 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 		return Info{}, err
 	}
 
+	out.LogoURL = providerLogo
+	if logo := s.d.Lists.Logo(chain, token); logo != "" {
+		out.LogoURL = &logo
+	}
 	var notes []Note
 	if priceErr == nil {
 		out.Sources = append(out.Sources, SourcePrices)

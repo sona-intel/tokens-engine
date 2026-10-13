@@ -28,6 +28,7 @@ type App struct {
 	cfg     config.Config
 	status  tokens.StatusDeps
 	st      *store.Store
+	lists   *tokens.Lists
 	Indexer *index.Indexer
 
 	mu      sync.Mutex
@@ -69,6 +70,7 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 	if a.Indexer != nil {
 		idx = a.Indexer
 	}
+	a.lists = tokens.NewLists(cfg, sources.NewTokenLists(cfg.TokenListTimeout))
 	a.Service = tokens.New(tokens.Deps{
 		Config:     cfg,
 		Chains:     chains,
@@ -78,6 +80,7 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 		Logs:       hs,
 		Index:      idx,
 		Store:      d.Store,
+		Lists:      a.lists,
 	})
 	paid := func() int64 {
 		var n int64
@@ -132,8 +135,9 @@ func (a *App) Ready(ctx context.Context) bool {
 	return a.ready
 }
 
-// Run runs the index until ctx ends
+// Run runs the index and the token list refresh until ctx ends
 func (a *App) Run(ctx context.Context) {
+	go a.lists.Run(ctx)
 	if a.Indexer == nil {
 		<-ctx.Done()
 		return

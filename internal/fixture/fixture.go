@@ -46,6 +46,7 @@ type Fakes struct {
 	mu          sync.Mutex
 	PricesDown  bool
 	GeckoDown   bool
+	ListsDown   bool
 	HyperDown   bool
 	IndexFull   bool
 	IndexState  string
@@ -64,7 +65,32 @@ func (f *Fakes) get(fn func(*Fakes) bool) bool {
 // whose USDC rows are derived from the recorded HyperSync page of USDC
 func Service(t testing.TB) (*tokens.Service, *Fakes) {
 	t.Helper()
-	f := &Fakes{IndexState: store.StateReady}
+	return build(t, curated)
+}
+
+// Uncurated is the same service with no curated token list, so a search finds only what GeckoTerminal and the index know
+func Uncurated(t testing.TB) (*tokens.Service, *Fakes) {
+	t.Helper()
+	return build(t, uncurated)
+}
+
+// ListsFailed is the same service whose curated lists all failed to load on start
+func ListsFailed(t testing.TB) (*tokens.Service, *Fakes) {
+	t.Helper()
+	return build(t, listsFailed)
+}
+
+type listMode int
+
+const (
+	curated listMode = iota
+	uncurated
+	listsFailed
+)
+
+func build(t testing.TB, mode listMode) (*tokens.Service, *Fakes) {
+	t.Helper()
+	f := &Fakes{IndexState: store.StateReady, ListsDown: mode == listsFailed}
 	cfg := Config()
 	bs := serve(t, f, map[string]string{
 		"/api/v2/tokens/" + EthUSDC.String():              "blockscout/token.usdc.json",
@@ -72,26 +98,45 @@ func Service(t testing.TB) (*tokens.Service, *Fakes) {
 		"/api/v2/tokens/" + EthUSDC.String() + "/holders": "blockscout/holders.usdc.page1.json",
 		"/api/v2/tokens/" + EthUSDC.String() + "/holders?address_hash=0x2f9ec5662c1199c028edc1f3eca0c22aa279f2b4&items_count=50&value=100000000090000": "blockscout/holders.usdc.page2.json",
 	}, nil)
-	gt := serve(t, f, map[string]string{
+	geckoRoutes := map[string]string{
 		"/networks/monad/tokens/" + MonUSDC.String() + "/info": "gecko/info.usdc.json",
 		"/networks/monad/tokens/" + MonUSDC.String():           "gecko/token.usdc.json",
 		"/networks/monad/tokens/" + MonWMON.String() + "/info": "gecko/info.wmon.json",
-	}, func(f *Fakes) bool { return f.GeckoDown })
+	}
+	for _, network := range []string{"eth", "monad"} {
+		for _, q := range []string{"usdc", "mon", "wmon", "pepe"} {
+			geckoRoutes["/search/pools?include=base_token%2Cquote_token&network="+network+"&query="+q] = "gecko/search." + network + "." + q + ".json"
+		}
+	}
+	gt := serve(t, f, geckoRoutes, func(f *Fakes) bool { return f.GeckoDown })
+	listFiles := serve(t, f, map[string]string{
+		"/uniswap": "lists/uniswap.json", "/monad": "lists/monad.json",
+	}, func(f *Fakes) bool { return f.ListsDown })
 	pr := serve(t, f, map[string]string{
 		"/internal/v1/chains/eip155:143/tokens/" + MonUSDC.String() + "/prices?range=1d": "prices/monad_usdc.json",
 	}, func(f *Fakes) bool { return f.PricesDown })
 
+	var lists *tokens.Lists
+	if mode != uncurated {
+		cfg.TokenLists = []config.TokenList{
+			{Name: "uniswap-default", URL: listFiles.URL + "/uniswap"},
+			{Name: "monad-mainnet", URL: listFiles.URL + "/monad"},
+		}
+		lists = tokens.NewLists(cfg, sources.NewTokenLists(time.Second))
+		lists.Load(t.Context())
+	}
 	usdc := page(t, "monad_usdc")
 	idx := &fakeIndex{f: f, page: usdc}
 	svc := tokens.New(tokens.Deps{
 		Config:     cfg,
 		Chains:     map[string]tokens.Chain{Ethereum: newChain(t, "ethereum"), Monad: newChain(t, "monad")},
 		Blockscout: sources.NewBlockscout(bs.URL, 1000),
-		Gecko:      sources.NewGecko(gt.URL, "monad", 600),
+		Gecko:      sources.NewGecko(gt.URL, "monad", 6000),
 		Prices:     sources.NewPrices(pr.URL),
 		Logs:       &fakeLogs{f: f, page: page(t, "eth_mkr"), head: 26180999},
 		Index:      idx,
 		Store:      idx,
+		Lists:      lists,
 		Now:        func() time.Time { return Now },
 	})
 	return svc, f
@@ -101,11 +146,11 @@ func Service(t testing.TB) (*tokens.Service, *Fakes) {
 func Config() config.Config {
 	return config.Config{
 		Chains: []config.Chain{
-			{ID: Ethereum, Name: "ethereum", Holders: config.HoldersBlockscout},
-			{ID: Monad, Name: "monad", Holders: config.HoldersIndex, WrappedNative: MonWMON},
+			{ID: Ethereum, Name: "ethereum", Holders: config.HoldersBlockscout, GeckoNetwork: "eth"},
+			{ID: Monad, Name: "monad", Holders: config.HoldersIndex, WrappedNative: MonWMON, GeckoNetwork: "monad"},
 		},
 		HyperSyncPerMinute: 3, HyperSyncInteractive: 2,
-		MetaCache: time.Minute, HoldersCache: time.Minute, GeckoCache: time.Minute, TransfersCache: time.Minute, PriceCache: time.Minute,
+		MetaCache: time.Minute, HoldersCache: time.Minute, GeckoCache: time.Minute, SearchCache: 5 * time.Minute, TokenListRefresh: 24 * time.Hour, TokenListTimeout: time.Second, TransfersCache: time.Minute, PriceCache: time.Minute,
 		TransferWindowBlocks: 1000, TransferMinBlocks: 20, TransferPageBudget: 3,
 		Index: config.Index{MaxTokens: 50, BackfillBudget: 120, ActivityWindowBlocks: 20000, TailInterval: time.Minute, LagBlocks: 10, WindowDays: 7, TopPerDay: 100},
 	}
@@ -268,6 +313,10 @@ func (x *fakeIndex) Ensure(_ context.Context, token evm.Address, decimals uint8)
 		return store.Token{ID: 2, Chain: Monad, Token: token, State: store.StateQueued, Mode: store.ModeFull, Decimals: decimals}, nil
 	}
 	return x.row(), nil
+}
+
+func (x *fakeIndex) IndexedTokens(context.Context, string) ([]evm.Address, error) {
+	return []evm.Address{MonUSDC}, nil
 }
 
 func (x *fakeIndex) Head(context.Context) uint64 { return x.page.ArchiveHeight }
