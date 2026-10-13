@@ -215,3 +215,27 @@ func (s *Store) Sizes(ctx context.Context) (Sizes, error) {
 	}
 	return out, nil
 }
+
+// IndexedTokens lists the tokens of a chain the index holds, oldest first
+func (s *Store) IndexedTokens(ctx context.Context, chain string) ([]evm.Address, error) {
+	rows, err := s.Pool.Query(ctx, `select token from indexed_tokens where chain = $1 order by id`, chain)
+	if err != nil {
+		return nil, fmt.Errorf("list tokens: %w", err)
+	}
+	defer rows.Close()
+	var out []evm.Address
+	for rows.Next() {
+		var b []byte
+		if err := rows.Scan(&b); err != nil {
+			return nil, fmt.Errorf("list tokens: %w", err)
+		}
+		if len(b) != len(evm.Address{}) {
+			return nil, errors.New("stored token address is not 20 bytes")
+		}
+		out = append(out, evm.Address(b))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list tokens: %w", err)
+	}
+	return out, nil
+}

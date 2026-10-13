@@ -149,3 +149,23 @@ func TestJobsAndCap(t *testing.T) {
 		t.Errorf("retry %+v %v", job, ok)
 	}
 }
+
+func TestIndexedTokens(t *testing.T) {
+	db := testkit.NewDB(t)
+	st, ctx := db.Store, t.Context()
+	if got, err := st.IndexedTokens(ctx, monad); err != nil || len(got) != 0 {
+		t.Fatalf("empty index: %v %v", got, err)
+	}
+	for _, n := range []byte{7, 3} {
+		if _, _, err := st.EnsureToken(ctx, monad, addr(n), 6, 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := st.EnsureToken(ctx, "eip155:1", addr(9), 6, 10); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.IndexedTokens(ctx, monad)
+	if err != nil || len(got) != 2 || got[0] != addr(7) || got[1] != addr(3) {
+		t.Errorf("tokens %v %v", got, err)
+	}
+}
