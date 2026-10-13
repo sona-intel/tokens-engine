@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"tokens/internal/config"
+	"tokens/internal/holdermap"
 	"tokens/internal/index"
 	"tokens/internal/markets"
 	"tokens/internal/rpc"
@@ -35,6 +36,7 @@ type App struct {
 	st      *store.Store
 	lists   *tokens.Lists
 	Indexer *index.Indexer
+	maps    *holdermap.Builder
 
 	mu      sync.Mutex
 	readyAt time.Time
@@ -80,6 +82,7 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 	}
 	blockscout := sources.NewBlockscout(cfg.BlockscoutURL, cfg.BlockscoutPerSecond)
 	a.lists = tokens.NewLists(cfg, sources.NewTokenLists(cfg.TokenListTimeout))
+	a.maps = holdermap.New(cfg.HolderMap, hs, d.Store, d.Logger)
 	a.Service = tokens.New(tokens.Deps{
 		Config:     cfg,
 		Chains:     chains,
@@ -90,6 +93,7 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 		Index:      idx,
 		Store:      d.Store,
 		Lists:      a.lists,
+		HolderMaps: a.maps,
 	})
 	a.marketService = markets.New(markets.Deps{
 		Config:     cfg.Markets,
@@ -113,6 +117,14 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 			func() float64 { return float64(hs.Stats().Requests) }),
 		prometheus.NewCounterFunc(prometheus.CounterOpts{Name: "tokens_hypersync_rate_limited_total", Help: "HyperSync queries answered 429"},
 			func() float64 { return float64(hs.Stats().RateLimited) }),
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "tokens_holder_map_queued", Help: "Holder maps waiting for their links to be read"},
+			func() float64 { return float64(a.maps.Stats().Queued) }),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{Name: "tokens_holder_map_built_total", Help: "Holder map links read and stored"},
+			func() float64 { return float64(a.maps.Stats().Built) }),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{Name: "tokens_holder_map_failed_total", Help: "Holder map link reads that failed"},
+			func() float64 { return float64(a.maps.Stats().Failed) }),
+		prometheus.NewCounterFunc(prometheus.CounterOpts{Name: "tokens_holder_map_hypersync_requests_total", Help: "HyperSync pages the holder map reads spent"},
+			func() float64 { return float64(a.maps.Stats().Requests) }),
 		prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "tokens_index_backfill_next_block", Help: "Next block of the running backfill, 0 when none runs"},
 			func() float64 {
 				if a.Indexer == nil {
@@ -151,10 +163,11 @@ func (a *App) Ready(ctx context.Context) bool {
 	return a.ready
 }
 
-// Run runs the index and the token list refresh until ctx ends
+// Run runs the index, the holder map builds and the token list refresh until ctx ends
 func (a *App) Run(ctx context.Context) {
 	go a.lists.Run(ctx)
 	go a.marketService.Run(ctx)
+	go a.maps.Run(ctx, a.Service)
 	if a.Indexer == nil {
 		<-ctx.Done()
 		return

@@ -40,6 +40,9 @@ const (
 	maxQuery        = 64
 	defaultLimit    = 25
 	maxLimit        = 100
+	defaultMapLimit = 100
+	minMapLimit     = 50
+	maxMapLimit     = 250
 	maxCursor       = 512
 	defaultDeadline = 5000 * time.Millisecond
 	maxDeadline     = time.Hour
@@ -57,6 +60,7 @@ type Service interface {
 	Info(ctx context.Context, chain string, token evm.Address) (tokens.Info, error)
 	Holders(ctx context.Context, chain string, token evm.Address, limit int, cursor string) (tokens.Holders, error)
 	Transfers(ctx context.Context, chain string, token evm.Address, limit int) (tokens.Transfers, error)
+	HolderMap(ctx context.Context, chain string, token evm.Address, limit int) (tokens.HolderMap, error)
 	Search(ctx context.Context, q string, limit int) (tokens.Search, error)
 	Status(ctx context.Context) (tokens.Status, error)
 	Ready(ctx context.Context) bool
@@ -73,6 +77,7 @@ var routes = []struct {
 	{"GET " + prefix, (*app).info},
 	{"GET " + prefix + "/holders", (*app).holders},
 	{"GET " + prefix + "/transfers", (*app).transfers},
+	{"GET " + prefix + "/holder-map", (*app).holderMap},
 }
 
 func New(svc Service, m *Metrics) http.Handler {
@@ -271,6 +276,20 @@ func (a *app) transfers() endpoint {
 			return nil, err
 		}
 		return a.svc.Transfers(c.ctx, c.chain, c.token, limit)
+	}
+}
+
+func (a *app) holderMap() endpoint {
+	return func(c *call) (any, error) {
+		q, err := parseQuery(c.req, "limit")
+		if err != nil {
+			return nil, err
+		}
+		limit, err := intParam(q, "limit", defaultMapLimit, minMapLimit, maxMapLimit)
+		if err != nil {
+			return nil, err
+		}
+		return a.svc.HolderMap(c.ctx, c.chain, c.token, limit)
 	}
 }
 

@@ -79,7 +79,9 @@ type Deps struct {
 	Store      IndexStore
 	// Lists are the curated token lists, nil for none
 	Lists *Lists
-	Now   func() time.Time
+	// HolderMaps builds the links of Ethereum holder maps, nil leaves links unavailable
+	HolderMaps HolderMaps
+	Now        func() time.Time
 }
 
 // Meta is what the token contract itself answers

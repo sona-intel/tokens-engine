@@ -92,3 +92,30 @@ func TestInvalidConfigs(t *testing.T) {
 		t.Error("a missing file loaded")
 	}
 }
+
+func TestHolderMapConfig(t *testing.T) {
+	cfg, err := Load(write(t, repoConfig(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.HolderMap
+	if h.WindowDays != 30 || h.PageBudget != 8 || h.FreshFor != 12*time.Hour || h.KeepFor != 7*24*time.Hour || h.QueueMax != 20 || h.RetryFailedAfter != 10*time.Minute {
+		t.Fatalf("holder map %+v", h)
+	}
+	base := repoConfig(t)
+	for _, c := range [][2]string{
+		{"  window_days: 30\n  # at most", "  window_days: 0\n  # at most"},
+		{"page_budget: 8", "page_budget: 21"},
+		{"fresh_for: 12h", "fresh_for: 300h"},
+		{"queue_max: 20", "queue_max: 0"},
+		{"keep_for: 168h\n  queue_max: 20\n  retry_failed_after: 10m", "keep_for: 168h\n  queue_max: 20\n  retry_failed_after: 1s"},
+		{"holder_map:\n", "holder_map:\n  colour: red\n"},
+	} {
+		if !strings.Contains(base, c[0]) {
+			t.Fatalf("the repo config lacks %q", c[0])
+		}
+		if _, err := Load(write(t, strings.Replace(base, c[0], c[1], 1))); err == nil {
+			t.Errorf("%q was accepted", c[1])
+		}
+	}
+}

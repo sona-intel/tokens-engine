@@ -2,6 +2,7 @@ package tokens_test
 
 import (
 	"errors"
+	"math"
 	"math/big"
 	"slices"
 	"testing"
@@ -216,5 +217,127 @@ func TestTransfersMonadIndex(t *testing.T) {
 	queued, err := svc.Transfers(t.Context(), fixture.Monad, fixture.MonWMON, 4)
 	if err != nil || queued.Window != nil || queued.Index.State != "queued" {
 		t.Errorf("a new token %+v %v", queued, err)
+	}
+}
+
+func TestHolderMapEthereum(t *testing.T) {
+	svc, f := fixture.Service(t)
+	ctx := t.Context()
+	m, err := svc.HolderMap(ctx, fixture.Ethereum, fixture.EthUNI, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Kind != "holder_map" || len(m.Nodes) != 100 || m.Links.Status != "building" || m.Links.BuiltAt != nil || len(m.Links.Items) != 0 || m.Links.WindowDays != 30 ||
+		len(m.Clusters) != 0 || !slices.Equal(m.Coverage, []string{"token_holders_ranked_by_provider"}) {
+		t.Fatalf("first answer %+v", m)
+	}
+	// the answer never waits for HyperSync
+	if f.MapLogs.Calls != 0 {
+		t.Fatalf("%d HyperSync calls before the build", f.MapLogs.Calls)
+	}
+	timelock, dead := m.Nodes[0], m.Nodes[1]
+	if timelock.Kind != "contract" || *timelock.Label != "Uniswap V2: UNI Timelock" || timelock.Balance != "262247996.305835021033106178" || *timelock.Share != 0.2622479963 ||
+		dead.Kind != "wallet" || dead.Address != "0x000000000000000000000000000000000000dead" || timelock.Cluster != nil {
+		t.Errorf("nodes %+v %+v", timelock, dead)
+	}
+
+	f.BuildMaps(ctx)
+	m, err = svc.HolderMap(ctx, fixture.Ethereum, fixture.EthUNI, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Links.Status != "ready" || *m.Links.BuiltAt != "2026-10-13T18:00:00Z" || m.Links.WindowDays != 30 || len(m.Links.Items) != 6 || f.MapLogs.Calls != 3 {
+		t.Fatalf("links %+v after %d pages", m.Links, f.MapLogs.Calls)
+	}
+	top := m.Links.Items[0]
+	if top.From != "0x28c6c06298d514db089934071355e5743bf21d60" || top.To != "0xf977814e90da44bfa03b6295a0616a897441acec" || top.Transfers != 1 || top.Amount != "4324434.389" {
+		t.Errorf("largest link %+v", top)
+	}
+	// every linked node is in a cluster, every cluster has two or more nodes and its share is the sum of theirs
+	linked := map[string]bool{}
+	for _, l := range m.Links.Items {
+		linked[l.From], linked[l.To] = true, true
+		if l.From >= l.To {
+			t.Errorf("link %+v is not in address order", l)
+		}
+	}
+	sizes, shares := map[int]int{}, map[int]float64{}
+	for _, n := range m.Nodes {
+		if (n.Cluster != nil) != linked[n.Address] {
+			t.Errorf("node %s cluster %v linked %v", n.Address, n.Cluster, linked[n.Address])
+		}
+		if n.Cluster != nil {
+			sizes[*n.Cluster]++
+			shares[*n.Cluster] += *n.Share
+		}
+	}
+	if len(m.Clusters) != 3 || m.Clusters[0].ID != 1 || m.Clusters[0].Size != 3 || m.Clusters[0].Share != 0.06152204057 {
+		t.Fatalf("clusters %+v", m.Clusters)
+	}
+	for i, c := range m.Clusters {
+		if c.Size < 2 || sizes[c.ID] != c.Size || math.Abs(shares[c.ID]-c.Share) > 1e-9 || i > 0 && c.Share > m.Clusters[i-1].Share {
+			t.Errorf("cluster %+v: %d nodes, share %v", c, sizes[c.ID], shares[c.ID])
+		}
+	}
+
+	// a map of the 50 largest is its own build, over its own nodes
+	small, err := svc.HolderMap(ctx, fixture.Ethereum, fixture.EthUNI, 50)
+	if err != nil || small.Links.Status != "building" || len(small.Nodes) != 50 {
+		t.Fatalf("50 nodes %+v %v", small.Links, err)
+	}
+	f.BuildMaps(ctx)
+	small, _ = svc.HolderMap(ctx, fixture.Ethereum, fixture.EthUNI, 50)
+	if small.Links.Status != "ready" || len(small.Links.Items) != 2 || len(small.Clusters) != 1 || len(f.MapLogs.Queries[3].Topics1) != 50 {
+		t.Errorf("50 nodes %+v %+v", small.Links, small.Clusters)
+	}
+}
+
+func TestHolderMapEthereumLinksFail(t *testing.T) {
+	svc, f := fixture.Service(t)
+	ctx := t.Context()
+	f.MapLogs.SetDown(true)
+	if _, err := svc.HolderMap(ctx, fixture.Ethereum, fixture.EthUNI, 100); err != nil {
+		t.Fatal(err)
+	}
+	f.BuildMaps(ctx)
+	m, err := svc.HolderMap(ctx, fixture.Ethereum, fixture.EthUNI, 100)
+	if err != nil || m.Links.Status != "unavailable" || len(m.Nodes) != 100 || !slices.Equal(m.Coverage, []string{"token_holders_ranked_by_provider", "token_holder_map_links_failed"}) {
+		t.Fatalf("after a failed build %+v %v", m, err)
+	}
+	if _, err := svc.HolderMap(ctx, fixture.Ethereum, fixture.EthEOA, 100); !errors.Is(err, tokens.ErrNotToken) {
+		t.Errorf("an EOA: %v", err)
+	}
+}
+
+func TestHolderMapMonad(t *testing.T) {
+	svc, f := fixture.Service(t)
+	ctx := t.Context()
+	// USDC follows recent activity, so its list is partial and the map shows none of it
+	m, err := svc.HolderMap(ctx, fixture.Monad, fixture.MonUSDC, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Nodes) != 0 || m.Links.Status != "unavailable" || len(m.Clusters) != 0 ||
+		!slices.Equal(m.Coverage, []string{"token_holder_map_index_incomplete", "token_holder_map_links_ethereum_only"}) {
+		t.Fatalf("activity mode %+v", m)
+	}
+	f.IndexMode = "full"
+	m, err = svc.HolderMap(ctx, fixture.Monad, fixture.MonUSDC, 50)
+	if err != nil || len(m.Nodes) == 0 || m.Links.Status != "unavailable" || !slices.Equal(m.Coverage, []string{"token_balances_from_transfers", "token_holder_map_links_ethereum_only"}) {
+		t.Fatalf("full mode %+v %v", m, err)
+	}
+	if n := m.Nodes[0]; n.Kind != "unknown" || n.Label != nil || n.Cluster != nil || n.Share == nil {
+		t.Errorf("node %+v", n)
+	}
+	f.IndexState = "indexing"
+	if m, _ := svc.HolderMap(ctx, fixture.Monad, fixture.MonUSDC, 50); len(m.Nodes) != 0 || !slices.Contains(m.Coverage, "token_holder_map_index_incomplete") {
+		t.Errorf("indexing %+v", m)
+	}
+	f.IndexFull = true
+	if m, _ := svc.HolderMap(ctx, fixture.Monad, fixture.MonWMON, 50); len(m.Nodes) != 0 || !slices.Contains(m.Coverage, "token_index_unavailable") {
+		t.Errorf("a full index %+v", m)
+	}
+	if f.MapLogs.Calls != 0 || f.Maps.Stats().Queued != 0 {
+		t.Error("a Monad map queued a HyperSync read")
 	}
 }

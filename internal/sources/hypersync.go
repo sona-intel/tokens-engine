@@ -40,6 +40,9 @@ type LogQuery struct {
 	To        uint64
 	Addresses []evm.Address
 	Topics0   []evm.Hash
+	// Topics1 and Topics2 narrow the second and third topic to these values, empty for any
+	Topics1 []evm.Hash
+	Topics2 []evm.Hash
 	// Blocks also selects the timestamps of the blocks that hold a log
 	Blocks bool
 }
@@ -158,9 +161,9 @@ func (q LogQuery) body() ([]byte, error) {
 	for i, a := range q.Addresses {
 		addrs[i] = a.String()
 	}
-	topics := make([]string, len(q.Topics0))
-	for i, t := range q.Topics0 {
-		topics[i] = t.String()
+	topics := [][]string{hexes(q.Topics0)}
+	if len(q.Topics1) > 0 || len(q.Topics2) > 0 {
+		topics = append(topics, hexes(q.Topics1), hexes(q.Topics2))
 	}
 	fields := hsFields{Log: logFields}
 	if q.Blocks {
@@ -169,10 +172,18 @@ func (q LogQuery) body() ([]byte, error) {
 	return json.Marshal(hsRequest{
 		FromBlock:      q.From,
 		ToBlock:        q.To,
-		Logs:           []hsLogFilter{{Address: addrs, Topics: [][]string{topics}}},
+		Logs:           []hsLogFilter{{Address: addrs, Topics: topics}},
 		FieldSelection: fields,
 		MaxNumLogs:     maxLogs,
 	})
+}
+
+func hexes(hs []evm.Hash) []string {
+	out := make([]string, len(hs))
+	for i, h := range hs {
+		out[i] = h.String()
+	}
+	return out
 }
 
 // Page sends one query and waits out a 429, up to interactiveAttempts or backgroundAttempts tries

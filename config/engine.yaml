@@ -83,3 +83,13 @@ markets:
       activity: true
     - id: "eip155:143"
       llama_name: Monad
+# Holder map: bubbles for the largest holders, and on Ethereum links between holders that sent each other the token.
+# Links come from HyperSync in a background job on the visitors' share of the quota (hypersync_interactive_per_minute).
+holder_map:
+  window_days: 30
+  # at most this many HyperSync requests per map, a busy token gets a shorter window
+  page_budget: 8
+  fresh_for: 12h
+  keep_for: 168h
+  queue_max: 20
+  retry_failed_after: 10m

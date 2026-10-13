@@ -4,6 +4,7 @@ package fixture
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 
 	"tokens/internal/config"
 	"tokens/internal/evm"
+	"tokens/internal/holdermap"
 	"tokens/internal/index"
 	"tokens/internal/rpc"
 	"tokens/internal/sources"
@@ -43,15 +45,23 @@ var Now = time.Date(2026, 10, 13, 18, 0, 0, 0, time.UTC)
 
 // Fakes are the switches a test can flip
 type Fakes struct {
-	mu          sync.Mutex
-	PricesDown  bool
-	GeckoDown   bool
-	ListsDown   bool
-	HyperDown   bool
-	IndexFull   bool
-	IndexState  string
+	mu         sync.Mutex
+	PricesDown bool
+	GeckoDown  bool
+	ListsDown  bool
+	HyperDown  bool
+	IndexFull  bool
+	IndexState string
+	// IndexMode is the mode of the indexed Monad USDC, activity unless a test sets full
+	IndexMode   string
 	HyperCalls  int
 	EnsureCalls int
+
+	// Maps builds the holder maps from MapLogs into MapStore, BuildMaps runs its queue
+	Maps      *holdermap.Builder
+	MapLogs   *MapLogs
+	MapStore  *MapStore
+	mapBlocks mapBlocks
 }
 
 func (f *Fakes) get(fn func(*Fakes) bool) bool {
@@ -90,13 +100,15 @@ const (
 
 func build(t testing.TB, mode listMode) (*tokens.Service, *Fakes) {
 	t.Helper()
-	f := &Fakes{IndexState: store.StateReady, ListsDown: mode == listsFailed}
+	f := &Fakes{IndexState: store.StateReady, IndexMode: store.ModeActivity, ListsDown: mode == listsFailed}
 	cfg := Config()
 	bs := serve(t, f, map[string]string{
 		"/api/v2/tokens/" + EthUSDC.String():              "blockscout/token.usdc.json",
 		"/api/v2/tokens/" + EthMKR.String():               "blockscout/token.mkr.json",
 		"/api/v2/tokens/" + EthUSDC.String() + "/holders": "blockscout/holders.usdc.page1.json",
 		"/api/v2/tokens/" + EthUSDC.String() + "/holders?address_hash=0x2f9ec5662c1199c028edc1f3eca0c22aa279f2b4&items_count=50&value=100000000090000": "blockscout/holders.usdc.page2.json",
+		"/api/v2/tokens/" + EthUNI.String() + "/holders": "blockscout/holders.uni.page1.json",
+		"/api/v2/tokens/" + EthUNI.String() + "/holders?address_hash=0xc52f8618ef7986ed7b47b4337b2249dea857ae4e&items_count=50&value=2690684850100000000000000": "blockscout/holders.uni.page2.json",
 	}, nil)
 	geckoRoutes := map[string]string{
 		"/networks/monad/tokens/" + MonUSDC.String() + "/info": "gecko/info.usdc.json",
@@ -127,9 +139,12 @@ func build(t testing.TB, mode listMode) (*tokens.Service, *Fakes) {
 	}
 	usdc := page(t, "monad_usdc")
 	idx := &fakeIndex{f: f, page: usdc}
+	eth := newChain(t, "ethereum")
+	f.MapLogs, f.MapStore, f.mapBlocks = NewMapLogs(UNIMapPages(t), UNIMapHead), NewMapStore(), mapBlocks{c: eth}
+	f.Maps = holdermap.New(cfg.HolderMap, f.MapLogs, f.MapStore, slog.New(slog.DiscardHandler)).WithClock(func() time.Time { return Now })
 	svc := tokens.New(tokens.Deps{
 		Config:     cfg,
-		Chains:     map[string]tokens.Chain{Ethereum: newChain(t, "ethereum"), Monad: newChain(t, "monad")},
+		Chains:     map[string]tokens.Chain{Ethereum: eth, Monad: newChain(t, "monad")},
 		Blockscout: sources.NewBlockscout(bs.URL, 1000),
 		Gecko:      sources.NewGecko(gt.URL, "monad", 6000),
 		Prices:     sources.NewPrices(pr.URL),
@@ -137,6 +152,7 @@ func build(t testing.TB, mode listMode) (*tokens.Service, *Fakes) {
 		Index:      idx,
 		Store:      idx,
 		Lists:      lists,
+		HolderMaps: f.Maps,
 		Now:        func() time.Time { return Now },
 	})
 	return svc, f
@@ -152,7 +168,8 @@ func Config() config.Config {
 		HyperSyncPerMinute: 3, HyperSyncInteractive: 2,
 		MetaCache: time.Minute, HoldersCache: time.Minute, GeckoCache: time.Minute, SearchCache: 5 * time.Minute, TokenListRefresh: 24 * time.Hour, TokenListTimeout: time.Second, TransfersCache: time.Minute, PriceCache: time.Minute,
 		TransferWindowBlocks: 1000, TransferMinBlocks: 20, TransferPageBudget: 3,
-		Index: config.Index{MaxTokens: 50, BackfillBudget: 120, ActivityWindowBlocks: 20000, TailInterval: time.Minute, LagBlocks: 10, WindowDays: 7, TopPerDay: 100},
+		Index:     config.Index{MaxTokens: 50, BackfillBudget: 120, ActivityWindowBlocks: 20000, TailInterval: time.Minute, LagBlocks: 10, WindowDays: 7, TopPerDay: 100},
+		HolderMap: config.HolderMap{WindowDays: 30, PageBudget: 8, FreshFor: 12 * time.Hour, KeepFor: 168 * time.Hour, QueueMax: 20, RetryFailedAfter: 10 * time.Minute},
 	}
 }
 
@@ -202,7 +219,7 @@ func newChain(t testing.TB, name string) *chain {
 	files := map[string]evm.Address{}
 	switch name {
 	case "ethereum":
-		files = map[string]evm.Address{"eth_usdc": EthUSDC, "eth_mkr": EthMKR, "eth_eoa": EthEOA}
+		files = map[string]evm.Address{"eth_usdc": EthUSDC, "eth_mkr": EthMKR, "eth_eoa": EthEOA, "eth_uni": EthUNI}
 	case "monad":
 		files = map[string]evm.Address{"monad_usdc": MonUSDC, "monad_wmon": MonWMON}
 	}
@@ -213,7 +230,7 @@ func newChain(t testing.TB, name string) *chain {
 		}
 		c.meta[token] = res
 	}
-	headers := map[string][]uint64{"ethereum": {26180000, 26180999}, "monad": {1, 113000000, 113000039}}[name]
+	headers := map[string][]uint64{"ethereum": {26180000, 26180999, UNIMapFrom, UNIMapHead}, "monad": {1, 113000000, 113000039}}[name]
 	for _, n := range headers {
 		num, at := testkit.Header(t, "rpc/header."+name+"_"+itoa(n)+".json")
 		c.headers[n] = rpc.Header{Number: num, Time: at}
@@ -289,7 +306,7 @@ func (x *fakeIndex) row() store.Token {
 	// the recorded query starts at block 113,000,000
 	start := uint64(113000000)
 	return store.Token{
-		ID: 1, Chain: Monad, Token: MonUSDC, State: x.f.IndexState, Mode: store.ModeActivity, Decimals: 6,
+		ID: 1, Chain: Monad, Token: MonUSDC, State: x.f.IndexState, Mode: x.f.IndexMode, Decimals: 6,
 		StartBlock: start, NextBlock: x.page.NextBlock, Holders: int64(len(x.rows())),
 	}
 }

@@ -46,6 +46,43 @@ At most one backfill runs at a time and the index holds at most `max_tokens` (50
 
 Transfers are ranked by amount, then newest first. Mints come from and burns go to the zero address. Deposits and withdrawals of wrapped MON are not transfers.
 
+## Holder map
+
+`GET .../tokens/{token}/holder-map?limit=` (50 to 250, default 100) gives the `limit` largest holders as nodes and, on Ethereum, the transfers between them as links. Each `limit` is its own map.
+
+### Nodes
+
+The same list as the holder route, read the same way: on Ethereum Blockscout's holder pages (kept 10 minutes, `token_holders_ranked_by_provider`), so 250 nodes take 5 pages; on Monad the index. A Monad map shows nodes only when the token's index is complete, `full` mode and `ready` (`token_balances_from_transfers`): an index in `activity` mode misses every holder that has not moved the token lately, and one still being built misses the rest of the history, and a map of such a list would put the wrong holders at the top. Those tokens answer no nodes (`token_holder_map_index_incomplete`, or `token_index_unavailable` when the index cannot take the token). The first call queues a Monad token in the index like the holder route.
+
+A node's `balance` is the holder's balance in token units, `share` as in the holder list, `label` Blockscout's name tag or contract name, and `kind` `contract` or `wallet` from Blockscout's `is_contract` (`unknown` on Monad).
+
+### Links
+
+Ethereum only; Monad answers `unavailable` (`token_holder_map_links_ethereum_only`). The index keeps no transfers but the largest of each day, and one HyperSync request covered about half an hour of Monad blocks for an active token in the index's measurements, so 30 days would take hundreds of requests, far past a map's budget.
+
+A link is every `Transfer(address,address,uint256)` log of the token in the window whose sender (topic 1) and receiver (topic 2) are both nodes, added up per unordered pair: `transfers` counts both directions and `amount` sums them in token units. Self transfers and the zero address are left out. `from` is the lower of the two addresses, not the sender. The logs come from one HyperSync query of the token's address, topic 0 the `Transfer` signature, and topics 1 and 2 each the list of nodes as 32-byte topics.
+
+- **Window.** The last 30 days (`window_days`): from the first block at or after the archive height's time minus 30 days (found by a search over block times through the RPC router) to the archive height.
+- **Requests.** At most 8 HyperSync requests a map (`page_budget`), sent on the visitors' share of the quota (`hypersync_interactive_per_minute`, 2 a minute, shared with the transfer windows), so the key's 15 a minute that x402-indexer mostly spends are never exceeded. A request that HyperSync refuses for the quota waits for the next quota window; after the client's own 3 tries the read asks twice more, then fails.
+- **Busy tokens.** One request covers what HyperSync scans in one go. When the first request shows that the 7 left cannot reach the archive height at its pace, the read starts again at the archive height minus 90% of what 7 requests would cover, so the window ends at the newest block; if the requests still run out, the map keeps what was read. Either way `window_days` is the span read, to one decimal, from the times of its first and last block, and the map says `token_holder_map_window_cut`. On 2026-10-13 UNI's 30 days with its 100 largest holders took 3 requests (70,000 to 78,000 blocks each).
+- **In the background.** A call never waits for HyperSync. It answers the stored links when they were read less than 12 hours ago (`ready`, `built_at`). Otherwise it answers `building` with no items and queues one read for the token and `limit`, unless one is queued or running. One read runs at a time, at most 20 wait, and a map past that answers `unavailable` (`token_holder_map_queue_full`). A read that fails answers `unavailable` (`token_holder_map_links_failed`) and is queued again by the first call 10 minutes later.
+- **Stored.** Postgres table `holder_map`, one row per chain, token and `limit`: when it was read, its first and last block, and the pairs as JSON. Rows older than 7 days are deleted every hour. A pair whose holder has left the node list since the read is dropped from the answer.
+
+A node's `cluster` comes from a union-find over the links of the answer: nodes that links connect, directly or through other nodes, are one cluster. `clusters` lists those of two or more nodes with their `size` and `share` (the sum of the members' balances over the total supply), largest share first; `id` is that rank from 1. A cluster says only that its holders moved the token between each other: one owner's wallets, an exchange and its hot wallets, or a pool and a router all look alike.
+
+### Coverage codes of this record
+
+| Code | Meaning |
+|---|---|
+| `token_holders_ranked_by_provider` | the Ethereum nodes are Blockscout's list |
+| `token_balances_from_transfers` | the Monad nodes are the full index's balances |
+| `token_holder_map_index_incomplete` | the Monad index of the token is still being built or follows recent activity, so `nodes` is empty |
+| `token_index_unavailable` | the Monad index cannot take the token, so `nodes` is empty |
+| `token_holder_map_links_ethereum_only` | links are read on Ethereum only |
+| `token_holder_map_window_cut` | the links cover fewer than 30 days, `links.window_days` says how many |
+| `token_holder_map_queue_full` | 20 maps wait for links, so this one was not queued |
+| `token_holder_map_links_failed` | the last read failed, a call queues it again 10 minutes after the failure |
+
 ## Logos
 
 `logo_url` of a token is the first https URL among: the `logoURI` of the curated lists (in list order: Uniswap default, then the Monad list), Blockscout's `icon_url` (Ethereum), GeckoTerminal's `image_url` (Monad). It is null when none gives one. A URL that is not https, has credentials, holds a space or control character, or is longer than 512 bytes is dropped, so GeckoTerminal's placeholder `missing_small.png` never shows.
@@ -116,5 +153,5 @@ The utilization line has no unit in the service's description; it was read as a 
 
 - No number is a forecast, and nothing here labels addresses beyond Blockscout's own name tags on Ethereum.
 - The Monad index trails the head by 10 blocks plus up to a minute of tail interval, more while the HyperSync quota is spent.
-- Cached answers can be up to their cache time old: contract reads 2 minutes, prices 1 minute, Blockscout 10 minutes, GeckoTerminal and Ethereum transfer windows 15 minutes, a GeckoTerminal search 5 minutes, a token list up to a day.
+- Cached answers can be up to their cache time old: contract reads 2 minutes, prices 1 minute, Blockscout 10 minutes, GeckoTerminal and Ethereum transfer windows 15 minutes, a GeckoTerminal search 5 minutes, a token list up to a day, holder map links 12 hours.
 - A token on a curated list is not safe or endorsed, and a token on no list is not a scam: `verified` only says which of the two the lists can tell. A token that was added to a list after the last read shows as unverified until the next one.

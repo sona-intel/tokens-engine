@@ -23,6 +23,7 @@ var (
 	monUSDC  = evm.MustAddress("0x754704bc059f8c67012fed69bc8a327a5aafb603")
 	monWMON  = evm.MustAddress("0x3bd359c1119da7da1d913d1c4d2b7c461115433a")
 	deadAddr = evm.MustAddress("0x000000000000000000000000000000000000dead")
+	ethUNI   = evm.MustAddress("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984")
 )
 
 // recorded serves testdata files by request path and query, a missing route answers 404 with an empty JSON object
@@ -215,6 +216,9 @@ func TestParseRecordedPages(t *testing.T) {
 		{"monad_usdc", monUSDC, 39, 113000040, 1},
 		{"monad_wmon", monWMON, 335, 113000300, 3},
 		{"eth_mkr", ethMKR, 49, 26181000, 1},
+		{"eth_uni_map.p1", ethUNI, 34, 26039863, 1},
+		{"eth_uni_map.p2", ethUNI, 71, 26118258, 1},
+		{"eth_uni_map.p3", ethUNI, 15, 26185639, 1},
 	}
 	for _, c := range cases {
 		page, err := ParsePage(testkit.Read(t, "hypersync/"+c.file+".json"))
@@ -226,7 +230,8 @@ func TestParseRecordedPages(t *testing.T) {
 		}
 		seen := map[evm.Hash]bool{}
 		for i, l := range page.Logs {
-			if l.Address != c.token || l.Time == 0 || len(l.Topics) == 0 {
+			// the holder map query selects no block times
+			if l.Address != c.token || (l.Time == 0) != strings.HasPrefix(c.file, "eth_uni_map") || len(l.Topics) == 0 {
 				t.Fatalf("%s: log %d %+v", c.file, i, l)
 			}
 			if i > 0 && (l.Block < page.Logs[i-1].Block || l.Block == page.Logs[i-1].Block && l.LogIndex <= page.Logs[i-1].LogIndex) {
@@ -242,6 +247,7 @@ func TestParseRecordedPages(t *testing.T) {
 
 // The engine's query body must be the one the recordings were made with
 func TestQueryBodyMatchesRecording(t *testing.T) {
+	holders := uniHolders(t)
 	cases := []struct {
 		file string
 		q    LogQuery
@@ -249,8 +255,13 @@ func TestQueryBodyMatchesRecording(t *testing.T) {
 		{"monad_usdc", LogQuery{From: 113000000, To: 113000040, Addresses: []evm.Address{monUSDC}, Topics0: []evm.Hash{evm.TopicTransfer}, Blocks: true}},
 		{"monad_wmon", LogQuery{From: 113000000, To: 113000300, Addresses: []evm.Address{monWMON}, Topics0: []evm.Hash{evm.TopicTransfer, evm.TopicDeposit, evm.TopicWithdrawal}, Blocks: true}},
 		{"eth_mkr", LogQuery{From: 26180000, To: 26181000, Addresses: []evm.Address{ethMKR}, Topics0: []evm.Hash{evm.TopicTransfer}, Blocks: true}},
+		{"eth_uni_map.p1", LogQuery{From: 25969639, To: 26185639, Addresses: []evm.Address{ethUNI}, Topics0: []evm.Hash{evm.TopicTransfer}, Topics1: holders, Topics2: holders}},
+		{"eth_uni_map.p2", LogQuery{From: 26039863, To: 26185639, Addresses: []evm.Address{ethUNI}, Topics0: []evm.Hash{evm.TopicTransfer}, Topics1: holders, Topics2: holders}},
 	}
 	for _, c := range cases {
+		if len(c.q.Topics1) > 0 && len(c.q.Topics1) != 100 {
+			t.Fatalf("%s: %d holders", c.file, len(c.q.Topics1))
+		}
 		body, err := c.q.body()
 		if err != nil {
 			t.Fatal(err)
@@ -263,6 +274,28 @@ func TestQueryBodyMatchesRecording(t *testing.T) {
 			t.Errorf("%s:\n got %s\nwant %s", c.file, mustJSONAny(got), mustJSONAny(want))
 		}
 	}
+}
+
+// uniHolders are the 100 UNI holders of the recorded Blockscout pages as topics, in Blockscout's order
+func uniHolders(t *testing.T) []evm.Hash {
+	t.Helper()
+	var out []evm.Hash
+	for _, f := range []string{"holders.uni.page1.json", "holders.uni.page2.json"} {
+		var raw bsHolders
+		if err := json.Unmarshal(testkit.Read(t, "blockscout/"+f), &raw); err != nil {
+			t.Fatal(err)
+		}
+		p, err := raw.convert()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, h := range p.Items {
+			var topic evm.Hash
+			copy(topic[12:], h.Address[:])
+			out = append(out, topic)
+		}
+	}
+	return out
 }
 
 func mustJSONAny(v any) string {

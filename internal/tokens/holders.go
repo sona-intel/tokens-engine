@@ -111,39 +111,9 @@ func (s *Service) Holders(ctx context.Context, chain string, token evm.Address, 
 func (s *Service) blockscoutPage(ctx context.Context, out *Holders, token evm.Address, meta Meta, limit int, c cursor) error {
 	out.Source = SourceBlockscout
 	notes := []Note{CovHoldersPartial}
-	page, off := c.values(), c.Offset
-	for len(out.Items) < limit {
-		p, err := s.blockscoutHolders(ctx, token, page)
-		if errors.Is(err, sources.ErrNotFound) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if off >= len(p.Items) {
-			break
-		}
-		take := min(limit-len(out.Items), len(p.Items)-off)
-		for _, h := range p.Items[off : off+take] {
-			item := Holder{Address: h.Address.String(), Balance: NewAmount(h.Value, meta.Decimals), Share: ratio(h.Value, meta.TotalSupply), IsContract: h.IsContract}
-			if h.Label != "" {
-				item.Label = &h.Label
-			}
-			out.Items = append(out.Items, item)
-		}
-		off += take
-		switch {
-		case off < len(p.Items):
-			out.NextCursor = cursor{Page: pageMap(page), Offset: off}.encode()
-		case p.Next != nil:
-			out.NextCursor = cursor{Page: pageMap(p.Next)}.encode()
-		default:
-			out.NextCursor = nil
-		}
-		if out.NextCursor == nil || len(out.Items) == limit {
-			break
-		}
-		page, off = p.Next, 0
+	var err error
+	if out.Items, out.NextCursor, err = s.blockscoutList(ctx, token, meta, limit, c); err != nil {
+		return err
 	}
 	t, err := s.blockscoutToken(ctx, token)
 	switch {
@@ -157,6 +127,47 @@ func (s *Service) blockscoutPage(ctx context.Context, out *Holders, token evm.Ad
 	}
 	out.Coverage = codes(ordered(notes)...)
 	return nil
+}
+
+// blockscoutList reads up to limit holders from the cursor on, across Blockscout's pages, and the cursor after them
+func (s *Service) blockscoutList(ctx context.Context, token evm.Address, meta Meta, limit int, c cursor) ([]Holder, *string, error) {
+	items := []Holder{}
+	var next *string
+	page, off := c.values(), c.Offset
+	for len(items) < limit {
+		p, err := s.blockscoutHolders(ctx, token, page)
+		if errors.Is(err, sources.ErrNotFound) {
+			break
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		if off >= len(p.Items) {
+			break
+		}
+		take := min(limit-len(items), len(p.Items)-off)
+		for _, h := range p.Items[off : off+take] {
+			item := Holder{Address: h.Address.String(), Balance: NewAmount(h.Value, meta.Decimals), Share: ratio(h.Value, meta.TotalSupply), IsContract: h.IsContract}
+			if h.Label != "" {
+				item.Label = &h.Label
+			}
+			items = append(items, item)
+		}
+		off += take
+		switch {
+		case off < len(p.Items):
+			next = cursor{Page: pageMap(page), Offset: off}.encode()
+		case p.Next != nil:
+			next = cursor{Page: pageMap(p.Next)}.encode()
+		default:
+			next = nil
+		}
+		if next == nil || len(items) == limit {
+			break
+		}
+		page, off = p.Next, 0
+	}
+	return items, next, nil
 }
 
 func (s *Service) indexPage(ctx context.Context, out *Holders, token evm.Address, meta Meta, limit int, c cursor) error {

@@ -84,6 +84,7 @@ type Config struct {
 	TransferPageBudget   int
 	Index                Index
 	Markets              Markets
+	HolderMap            HolderMap
 }
 
 // Chain returns the chain with this CAIP-2 id
@@ -178,6 +179,7 @@ type file struct {
 	TransferPageBudget   int             `yaml:"transfer_page_budget"`
 	Index                indexFile       `yaml:"index"`
 	Markets              marketsFile     `yaml:"markets"`
+	HolderMap            holderMapFile   `yaml:"holder_map"`
 }
 
 var (
@@ -262,7 +264,8 @@ func (f file) build() (Config, error) {
 			TopPerDay:            f.Index.TopPerDay,
 			RetryFailedAfter:     f.Index.RetryFailedAfter,
 		},
-		Markets: f.Markets.build(),
+		Markets:   f.Markets.build(),
+		HolderMap: f.HolderMap.build(),
 	}
 	for _, c := range f.Chains {
 		ch := Chain{ID: c.ID, Name: c.Name, RPCURL: c.RPCURL, HyperSyncURL: c.HyperSyncURL, Holders: c.Holders, GeckoNetwork: c.GeckoNetwork}
@@ -317,6 +320,9 @@ func (f file) validate() error {
 		return err
 	}
 	if err := f.Markets.validate(f.Chains); err != nil {
+		return err
+	}
+	if err := f.HolderMap.validate(); err != nil {
 		return err
 	}
 	return f.Index.validate()

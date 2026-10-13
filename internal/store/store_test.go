@@ -169,3 +169,37 @@ func TestIndexedTokens(t *testing.T) {
 		t.Errorf("tokens %v %v", got, err)
 	}
 }
+
+func TestHolderMapRows(t *testing.T) {
+	db := testkit.NewDB(t)
+	st, ctx := db.Store, t.Context()
+	uni := evm.MustAddress("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984")
+	if _, ok, err := st.HolderMap(ctx, "eip155:1", uni, 100); ok || err != nil {
+		t.Fatalf("an empty table %v %v", ok, err)
+	}
+	built := time.Date(2026, 10, 13, 18, 0, 0, 0, time.UTC)
+	m := store.HolderMap{Chain: "eip155:1", Token: uni, Limit: 100, BuiltAt: built, FromBlock: 25969639, ToBlock: 26185638, Links: []byte(`{"window_days":30,"pairs":[]}`)}
+	if err := st.PutHolderMap(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	m.Limit, m.BuiltAt = 50, built.Add(-8*24*time.Hour)
+	if err := st.PutHolderMap(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	// a new build replaces the row of its token and limit
+	m.Limit, m.BuiltAt, m.FromBlock, m.Links = 100, built.Add(time.Hour), 26000000, []byte(`{"window_days":8.8,"pairs":[]}`)
+	if err := st.PutHolderMap(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := st.HolderMap(ctx, "eip155:1", uni, 100)
+	if err != nil || !ok || got.FromBlock != 26000000 || got.ToBlock != 26185638 || !got.BuiltAt.Equal(built.Add(time.Hour)) || string(got.Links) != `{"pairs": [], "window_days": 8.8}` {
+		t.Fatalf("row %+v %s %v", got, got.Links, err)
+	}
+	n, err := st.PruneHolderMaps(ctx, built.Add(-7*24*time.Hour))
+	if err != nil || n != 1 {
+		t.Fatalf("pruned %d %v", n, err)
+	}
+	if _, ok, _ := st.HolderMap(ctx, "eip155:1", uni, 50); ok {
+		t.Error("the 8 day old row is still there")
+	}
+}

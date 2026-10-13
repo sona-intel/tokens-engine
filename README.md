@@ -6,6 +6,7 @@ Sona's token data for token pages on Ethereum (`eip155:1`) and Monad (`eip155:14
 - what it is worth: price, fully diluted value and the market cap a provider reports;
 - who holds it: holder count, the share of the top 10 holders, and the holder list, largest first;
 - what moved: the largest transfers of a recent window;
+- who trades with whom: a holder map of the largest holders with the transfers between them over 30 days (links on Ethereum);
 - how to find it: a search by symbol or name, with the tokens on curated lists first, and a logo for each token.
 
 Beside the token records it serves figures for the market and for each chain, read in the background and held in memory:
@@ -29,15 +30,15 @@ The engine only reads. It holds no wallet or private key and signs nothing. Its 
 | Blockscout (`eth.blockscout.com`, keyless, at most 3 requests a second) | Ethereum: holder count, circulating market cap, holder pages |
 | GeckoTerminal (`api.geckoterminal.com`, keyless, at most 20 requests a minute) | Monad: holder count, top 10 share, market cap, logo. Both chains: the pool search behind the token search |
 | Curated token lists (Uniswap default list at `tokens.uniswap.org`, the Monad Foundation's `monad-crypto/token-list` on GitHub, keyless, read on start and daily) | verified tokens of the search and the first choice of `logo_url` |
-| Envio HyperSync (`ENVIO_HYPERSYNC_KEY`) | Ethereum: the transfer window of a token. Monad: the backfill and the tail of the holder index |
+| Envio HyperSync (`ENVIO_HYPERSYNC_KEY`) | Ethereum: the transfer window of a token and the links of holder maps. Monad: the backfill and the tail of the holder index |
 | CoinGecko (`api.coingecko.com`, keyless, at most 1 request every 20 seconds; the optional demo key `COINGECKO_API_KEY` goes in `x-cg-demo-api-key`) | the top coins and the coin list with contract addresses |
 | DefiLlama (`api.llama.fi`, `stablecoins.llama.fi`, keyless, at most 30 requests a minute) | TVL, protocols, stablecoins and DEX volume of a chain |
 | Blockscout stats service (`eth.blockscout.com/stats-service`, same pacer as Blockscout) | Ethereum's daily activity |
-| Postgres | the Monad index: indexed tokens, current balances, the largest transfers of each day of the last 7 |
+| Postgres | the Monad index: indexed tokens, current balances, the largest transfers of each day of the last 7; the links of holder maps (`holder_map`, 7 days) |
 
 ### The HyperSync quota
 
-The key allows 15 requests a minute, shared with Sona's x402 indexer, which spends most of each minute within seconds of its start. The engine keeps to 3 requests a minute for the index and 2 for visitors (`hypersync_per_minute`, `hypersync_interactive_per_minute`). It reads the quota headers of every answer: when a window is spent it waits until a second after the reset and then sends its share at once. A 429 waits the same way.
+The key allows 15 requests a minute, shared with Sona's x402 indexer, which spends most of each minute within seconds of its start. The engine keeps to 3 requests a minute for the index and 2 for visitors (`hypersync_per_minute`, `hypersync_interactive_per_minute`); the visitors' 2 also carry the holder map reads, which run in the background, one at a time, at most 8 requests each. It reads the quota headers of every answer: when a window is spent it waits until a second after the reset and then sends its share at once. A 429 waits the same way.
 
 One HyperSync request covers about 4,000 to 5,000 Monad blocks (half an hour of chain) wherever a token is active, and only a few dozen Ethereum blocks for a busy token. That is why the Monad index has two modes and the Ethereum window shrinks for busy tokens; `RULES.md` has the details.
 
@@ -50,6 +51,7 @@ Internal only. `sona-api` is the public face. The full contract is [`openapi.yam
 | `GET /internal/v1/chains/{chain}/tokens/{token}` | `token_info`: name, symbol, decimals, total supply, price, FDV, market cap, holder count, top 10 share, sources, coverage |
 | `GET .../tokens/{token}/holders?limit=&cursor=` | `token_holders`: holders largest first with balance and share, `next_cursor`, holder count, source, and the Monad `index` state |
 | `GET .../tokens/{token}/transfers?limit=` | `token_transfers`: the largest transfers of the window, with the window's blocks and times |
+| `GET .../tokens/{token}/holder-map?limit=` | `holder_map`: the 50 to 250 largest holders as nodes, the transfers between them over 30 days as links (Ethereum, read in the background: `links.status` `building`, then `ready` for 12 hours), and the clusters the links make |
 | `GET /internal/v1/tokens/search?q=&limit=` | `token_search`: tokens of both chains whose symbol or name matches `q`, curated tokens first (`verified: true`), the rest by pool liquidity, each with its logo |
 | `GET /internal/v1/status` | chains, paid RPC calls, HyperSync use, and every indexed Monad token with its state, mode, blocks and backfill cost |
 | `GET /healthz`, `GET /readyz` | liveness, and readiness (the database answers) |
@@ -58,7 +60,7 @@ An address that answers neither `decimals()` nor `totalSupply()` is no token and
 
 ## Configuration
 
-`config/engine.yaml` holds the chains (CAIP-2 id, RPC and HyperSync URLs, GeckoTerminal network, where holders come from, the wrapped native coin), the curated token lists and their refresh time, the source URLs and rates, the cache times, the Ethereum transfer window and the index settings (`max_tokens` 50, `backfill_budget` 120 requests, `activity_window_blocks` 20,000, `tail_interval` 60 s, `lag_blocks` 10, `window_days` 7, `top_per_day` 100, `prewarm` USDC and WMON). It is validated on start, and a key it does not know is an error. Settings from the environment (names in `.env.example`):
+`config/engine.yaml` holds the chains (CAIP-2 id, RPC and HyperSync URLs, GeckoTerminal network, where holders come from, the wrapped native coin), the curated token lists and their refresh time, the source URLs and rates, the cache times, the Ethereum transfer window, the holder map (`window_days` 30, `page_budget` 8, `fresh_for` 12 h, `keep_for` 7 days, `queue_max` 20) and the index settings (`max_tokens` 50, `backfill_budget` 120 requests, `activity_window_blocks` 20,000, `tail_interval` 60 s, `lag_blocks` 10, `window_days` 7, `top_per_day` 100, `prewarm` USDC and WMON). It is validated on start, and a key it does not know is an error. Settings from the environment (names in `.env.example`):
 
 | Variable | Use |
 |---|---|
@@ -111,6 +113,7 @@ Tests need no network. The ones that need Postgres skip unless `TOKENS_TEST_PG` 
 | `internal/sources` | Blockscout, GeckoTerminal, token list, prices and HyperSync clients, the pacer |
 | `internal/cache` | in-memory answers with expiry, one fetch per key at a time |
 | `internal/index` | the Monad index: decoding, backfill, mode switch and tail |
+| `internal/holdermap` | holder map links: the build queue, the HyperSync read, pairs and clusters |
 | `internal/store`, `migrations` | Postgres access and embedded SQL |
 | `internal/tokens` | the token records, the curated lists and the search |
 | `internal/server` | HTTP handlers, parameters, problem mapping, metrics |

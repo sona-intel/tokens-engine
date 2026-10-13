@@ -64,6 +64,13 @@ func (s *svc) Transfers(ctx context.Context, chain string, token evm.Address, li
 	return s.Service.Transfers(ctx, chain, token, limit)
 }
 
+func (s *svc) HolderMap(ctx context.Context, chain string, token evm.Address, limit int) (tokens.HolderMap, error) {
+	if s.fail != nil {
+		return tokens.HolderMap{}, s.fail
+	}
+	return s.Service.HolderMap(ctx, chain, token, limit)
+}
+
 func (s *svc) Search(ctx context.Context, q string, limit int) (tokens.Search, error) {
 	if s.fail != nil {
 		return tokens.Search{}, s.fail
@@ -113,8 +120,16 @@ var (
 	monUSDC  = fixture.MonUSDC.String()
 	monWMON  = fixture.MonWMON.String()
 	eoa      = fixture.EthEOA.String()
+	uni      = fixture.EthUNI.String()
 	search   = "/internal/v1/tokens/search"
 	failWith = func(err error) func(*svc) { return func(s *svc) { s.fail = err } }
+	// mapBuilt asks for UNI's map once and runs the build it queued, so the next answer has links
+	mapBuilt = func(limit int) func(*svc) {
+		return func(s *svc) {
+			_, _ = s.Service.HolderMap(context.Background(), fixture.Ethereum, fixture.EthUNI, limit)
+			s.f.BuildMaps(context.Background())
+		}
+	}
 )
 
 func cases() []specCase {
@@ -137,6 +152,12 @@ func cases() []specCase {
 		{name: "transfers on Monad", path: mon + monUSDC + "/transfers"},
 		{name: "transfers on Monad of a queued token", path: mon + monWMON + "/transfers?limit=100"},
 		{name: "info of MKR with a logo from Blockscout", path: eth + mkr},
+		{name: "holder map of UNI while its links build", path: eth + uni + "/holder-map"},
+		{name: "holder map of UNI with links", path: eth + uni + "/holder-map", mutate: mapBuilt(100)},
+		{name: "holder map of the 50 largest UNI holders with links", path: eth + uni + "/holder-map?limit=50", mutate: mapBuilt(50)},
+		{name: "holder map whose links failed", path: eth + uni + "/holder-map", mutate: func(s *svc) { s.f.MapLogs.SetDown(true); mapBuilt(100)(s) }},
+		{name: "holder map of Monad USDC in activity mode", path: mon + monUSDC + "/holder-map"},
+		{name: "holder map of Monad USDC in full mode", path: mon + monUSDC + "/holder-map?limit=50", mutate: func(s *svc) { s.f.IndexMode = "full" }},
 		{name: "search for usdc", path: search + "?q=usdc"},
 		{name: "search for mon", path: search + "?q=mon&limit=5"},
 		{name: "search for wmon", path: search + "?q=wmon&limit=20"},
@@ -152,6 +173,9 @@ func cases() []specCase {
 		{name: "cursor this engine did not make", path: eth + usdc + "/holders?cursor=eyJ4IjoxfQ", status: http.StatusBadRequest},
 		{name: "unknown parameter", path: eth + usdc + "?foo=1", status: http.StatusBadRequest},
 		{name: "repeated parameter", path: eth + usdc + "/holders?limit=1&limit=2", status: http.StatusBadRequest},
+		{name: "holder map with limit 49", path: eth + uni + "/holder-map?limit=49", status: http.StatusBadRequest, malformed: true},
+		{name: "holder map with limit 251", path: eth + uni + "/holder-map?limit=251", status: http.StatusBadRequest, malformed: true},
+		{name: "holder map with a cursor", path: eth + uni + "/holder-map?cursor=abc", status: http.StatusBadRequest},
 		{name: "search with one character", path: search + "?q=z", status: http.StatusBadRequest, malformed: true},
 		{name: "search with only spaces", path: search + "?q=%20%20%20", status: http.StatusBadRequest},
 		{name: "search with 65 characters", path: search + "?q=" + strings.Repeat("a", 65), status: http.StatusBadRequest, malformed: true},
@@ -167,6 +191,7 @@ func cases() []specCase {
 		{name: "another chain", path: "/internal/v1/chains/eip155:8453/tokens/" + usdc, status: http.StatusNotFound},
 		{name: "an EOA", path: eth + eoa, status: http.StatusNotFound},
 		{name: "holders of an EOA", path: eth + eoa + "/holders", status: http.StatusNotFound},
+		{name: "holder map of an EOA", path: eth + eoa + "/holder-map", status: http.StatusNotFound},
 		{name: "unknown route", path: "/nope", like: eth + usdc, status: http.StatusNotFound},
 
 		{name: "transfers while the HyperSync quota is spent", path: eth + usdc + "/transfers", status: http.StatusServiceUnavailable, mutate: func(s *svc) { s.f.HyperDown = true }},
@@ -176,6 +201,7 @@ func cases() []specCase {
 		{name: "info that times out", path: eth + usdc, status: http.StatusGatewayTimeout, mutate: failWith(fmt.Errorf("read: %w", context.DeadlineExceeded))},
 		{name: "info of a client that left", path: eth + usdc, status: statusClientClosed, gone: true, mutate: failWith(context.Canceled)},
 		{name: "holders the database rejects", path: mon + monUSDC + "/holders", status: http.StatusInternalServerError, mutate: failWith(&pgconn.PgError{Code: "42703"})},
+		{name: "holder map with the database down", path: eth + uni + "/holder-map", status: http.StatusServiceUnavailable, mutate: failWith(errors.New("dial tcp: connection refused"))},
 	}
 }
 
