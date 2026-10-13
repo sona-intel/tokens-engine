@@ -4,12 +4,14 @@ chains:
     rpc_url: http://rpc-router:4000/sona/ethereum
     hypersync_url: https://eth.hypersync.xyz/query
     holders: blockscout
+    gecko_network: eth
     wrapped_native: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
   - id: "eip155:143"
     name: monad
     rpc_url: http://rpc-router:4000/sona/monad
     hypersync_url: https://monad.hypersync.xyz/query
     holders: index
+    gecko_network: monad
     # WMON, a WETH9 copy whose Deposit and Withdrawal events mint and burn
     wrapped_native: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a"
 # X-ERPC-Use-Upstream on every JSON-RPC request, so the router never uses its paid dRPC upstreams
@@ -30,6 +32,19 @@ holders_cache: 10m
 geckoterminal_cache: 15m
 transfers_cache: 15m
 price_cache: 1m
+# a token search is kept 5 minutes, GeckoTerminal allows few requests and a search spends one per chain
+search_cache: 5m
+# Curated token lists in the Uniswap token list format. The tokens on them are verified in a search, and the earlier
+# a list the higher it ranks. They load on start and again every token_list_refresh; a list that fails keeps its last copy.
+token_lists:
+  # Uniswap Labs' default list, the engine keeps its Ethereum (1) and Monad (143) entries
+  - name: uniswap-default
+    url: https://tokens.uniswap.org
+  # the Monad Foundation's list of Monad mainnet tokens, https://github.com/monad-crypto/token-list
+  - name: monad-mainnet
+    url: https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/tokenlist-mainnet.json
+token_list_refresh: 24h
+token_list_timeout: 20s
 # Ethereum's large transfers come from the last blocks: 7,200 blocks is about a day, cut down for busy tokens
 transfer_window_blocks: 7200
 transfer_min_blocks: 20

@@ -36,6 +36,14 @@ type Chain struct {
 	HyperSyncURL  string
 	Holders       string
 	WrappedNative evm.Address
+	// GeckoNetwork is the GeckoTerminal network id of the chain, used by the token search
+	GeckoNetwork string
+}
+
+// TokenList is a curated token list in the Uniswap token list format, the earlier a list the higher its rank
+type TokenList struct {
+	Name string
+	URL  string
 }
 
 type Index struct {
@@ -67,6 +75,10 @@ type Config struct {
 	GeckoCache           time.Duration
 	TransfersCache       time.Duration
 	PriceCache           time.Duration
+	SearchCache          time.Duration
+	TokenLists           []TokenList
+	TokenListRefresh     time.Duration
+	TokenListTimeout     time.Duration
 	TransferWindowBlocks uint64
 	TransferMinBlocks    uint64
 	TransferPageBudget   int
@@ -120,6 +132,12 @@ type chainFile struct {
 	HyperSyncURL  string `yaml:"hypersync_url"`
 	Holders       string `yaml:"holders"`
 	WrappedNative string `yaml:"wrapped_native"`
+	GeckoNetwork  string `yaml:"gecko_network"`
+}
+
+type tokenListFile struct {
+	Name string `yaml:"name"`
+	URL  string `yaml:"url"`
 }
 
 type indexFile struct {
@@ -135,25 +153,29 @@ type indexFile struct {
 }
 
 type file struct {
-	Chains               []chainFile   `yaml:"chains"`
-	RPCUpstreamFilter    *string       `yaml:"rpc_upstream_filter"`
-	BlockscoutURL        string        `yaml:"blockscout_url"`
-	BlockscoutPerSecond  float64       `yaml:"blockscout_per_second"`
-	GeckoURL             string        `yaml:"geckoterminal_url"`
-	GeckoNetwork         string        `yaml:"geckoterminal_network"`
-	GeckoPerMinute       float64       `yaml:"geckoterminal_per_minute"`
-	PricesURL            string        `yaml:"prices_url"`
-	HyperSyncPerMinute   float64       `yaml:"hypersync_per_minute"`
-	HyperSyncInteractive float64       `yaml:"hypersync_interactive_per_minute"`
-	MetaCache            time.Duration `yaml:"meta_cache"`
-	HoldersCache         time.Duration `yaml:"holders_cache"`
-	GeckoCache           time.Duration `yaml:"geckoterminal_cache"`
-	TransfersCache       time.Duration `yaml:"transfers_cache"`
-	PriceCache           time.Duration `yaml:"price_cache"`
-	TransferWindowBlocks uint64        `yaml:"transfer_window_blocks"`
-	TransferMinBlocks    uint64        `yaml:"transfer_min_blocks"`
-	TransferPageBudget   int           `yaml:"transfer_page_budget"`
-	Index                indexFile     `yaml:"index"`
+	Chains               []chainFile     `yaml:"chains"`
+	RPCUpstreamFilter    *string         `yaml:"rpc_upstream_filter"`
+	BlockscoutURL        string          `yaml:"blockscout_url"`
+	BlockscoutPerSecond  float64         `yaml:"blockscout_per_second"`
+	GeckoURL             string          `yaml:"geckoterminal_url"`
+	GeckoNetwork         string          `yaml:"geckoterminal_network"`
+	GeckoPerMinute       float64         `yaml:"geckoterminal_per_minute"`
+	PricesURL            string          `yaml:"prices_url"`
+	HyperSyncPerMinute   float64         `yaml:"hypersync_per_minute"`
+	HyperSyncInteractive float64         `yaml:"hypersync_interactive_per_minute"`
+	MetaCache            time.Duration   `yaml:"meta_cache"`
+	HoldersCache         time.Duration   `yaml:"holders_cache"`
+	GeckoCache           time.Duration   `yaml:"geckoterminal_cache"`
+	TransfersCache       time.Duration   `yaml:"transfers_cache"`
+	PriceCache           time.Duration   `yaml:"price_cache"`
+	SearchCache          time.Duration   `yaml:"search_cache"`
+	TokenLists           []tokenListFile `yaml:"token_lists"`
+	TokenListRefresh     time.Duration   `yaml:"token_list_refresh"`
+	TokenListTimeout     time.Duration   `yaml:"token_list_timeout"`
+	TransferWindowBlocks uint64          `yaml:"transfer_window_blocks"`
+	TransferMinBlocks    uint64          `yaml:"transfer_min_blocks"`
+	TransferPageBudget   int             `yaml:"transfer_page_budget"`
+	Index                indexFile       `yaml:"index"`
 }
 
 var (
@@ -221,6 +243,9 @@ func (f file) build() (Config, error) {
 		GeckoCache:           f.GeckoCache,
 		TransfersCache:       f.TransfersCache,
 		PriceCache:           f.PriceCache,
+		SearchCache:          f.SearchCache,
+		TokenListRefresh:     f.TokenListRefresh,
+		TokenListTimeout:     f.TokenListTimeout,
 		TransferWindowBlocks: f.TransferWindowBlocks,
 		TransferMinBlocks:    f.TransferMinBlocks,
 		TransferPageBudget:   f.TransferPageBudget,
@@ -236,11 +261,14 @@ func (f file) build() (Config, error) {
 		},
 	}
 	for _, c := range f.Chains {
-		ch := Chain{ID: c.ID, Name: c.Name, RPCURL: c.RPCURL, HyperSyncURL: c.HyperSyncURL, Holders: c.Holders}
+		ch := Chain{ID: c.ID, Name: c.Name, RPCURL: c.RPCURL, HyperSyncURL: c.HyperSyncURL, Holders: c.Holders, GeckoNetwork: c.GeckoNetwork}
 		if c.WrappedNative != "" {
 			ch.WrappedNative = evm.MustAddress(c.WrappedNative)
 		}
 		cfg.Chains = append(cfg.Chains, ch)
+	}
+	for _, l := range f.TokenLists {
+		cfg.TokenLists = append(cfg.TokenLists, TokenList(l))
 	}
 	for _, p := range f.Index.Prewarm {
 		cfg.Index.Prewarm = append(cfg.Index.Prewarm, evm.MustAddress(p))
@@ -272,12 +300,33 @@ func (f file) validate() error {
 			f.HyperSyncPerMinute, f.HyperSyncInteractive)
 	case f.MetaCache <= 0 || f.HoldersCache <= 0 || f.GeckoCache <= 0 || f.TransfersCache <= 0 || f.PriceCache <= 0:
 		return errors.New("meta_cache, holders_cache, geckoterminal_cache, transfers_cache and price_cache must be positive")
+	case f.SearchCache <= 0:
+		return errors.New("search_cache must be positive")
+	case f.TokenListRefresh < time.Minute || f.TokenListTimeout < time.Second || f.TokenListTimeout > time.Minute:
+		return errors.New("token_list_refresh must be at least 1m and token_list_timeout 1s to 1m")
 	case f.TransferWindowBlocks < 1 || f.TransferMinBlocks < 1 || f.TransferMinBlocks > f.TransferWindowBlocks:
 		return errors.New("transfer_window_blocks and transfer_min_blocks must be positive, with the minimum not above the window")
 	case f.TransferPageBudget < 1 || f.TransferPageBudget > 10:
 		return fmt.Errorf("transfer_page_budget must be 1 to 10, got %d", f.TransferPageBudget)
 	}
+	if err := f.validateLists(); err != nil {
+		return err
+	}
 	return f.Index.validate()
+}
+
+func (f file) validateLists() error {
+	seen := map[string]bool{}
+	for _, l := range f.TokenLists {
+		switch {
+		case !namePat.MatchString(l.Name) || seen[l.Name]:
+			return fmt.Errorf("token list name %q must be lowercase letters, digits and dashes, and unique", l.Name)
+		case !validURL(l.URL, "https"):
+			return fmt.Errorf("url of token list %s must be an https URL without credentials", l.Name)
+		}
+		seen[l.Name] = true
+	}
+	return nil
 }
 
 func (f file) validateChains() error {
@@ -298,6 +347,8 @@ func (f file) validateChains() error {
 			return fmt.Errorf("rpc_url of %s (or TOKENS_RPC_%s) must be an http or https URL without credentials", c.ID, strings.ToUpper(c.Name))
 		case !validURL(c.HyperSyncURL, "https"):
 			return fmt.Errorf("hypersync_url of %s must be an https URL without credentials", c.ID)
+		case !networks.MatchString(c.GeckoNetwork):
+			return fmt.Errorf("gecko_network of %s is not a network id", c.ID)
 		case c.Holders != HoldersBlockscout && c.Holders != HoldersIndex:
 			return fmt.Errorf("holders of %s must be %s or %s", c.ID, HoldersBlockscout, HoldersIndex)
 		}
