@@ -1,0 +1,612 @@
+openapi: 3.1.2
+info:
+  title: Sona token engine
+  version: 1.0.0
+  summary: Internal token data for token pages on Ethereum and Monad, called only by sona-api.
+  description: |
+    This service answers three questions about one ERC-20 token: what is it (name, symbol, supply, price, market cap, holder count), who holds it, and what were its largest recent transfers. It serves Ethereum (`eip155:1`) and Monad (`eip155:143`). Only the public `sona-api` will call it, and it will put these bodies inside its public answers. You call it directly to debug, or to see exactly what the public API will get.
+
+    | Container | Inside the Docker network | On the host |
+    |---|---|---|
+    | `tokens-engine` | `http://tokens-engine:8080` | `127.0.0.1:8221` |
+
+    Call it with curl, for example `curl http://127.0.0.1:8221/internal/v1/chains/eip155:143/tokens/0x754704bc059f8c67012fed69bc8a327a5aafb603`. Every body is one bare record, as in the other Sona engines: it starts with `kind` (the shape of the record), and the token records end with `coverage`. A list is a record with `items`. Nothing wraps the record.
+
+    ## Where the data comes from
+
+    | Field | Ethereum (`eip155:1`) | Monad (`eip155:143`) |
+    |---|---|---|
+    | name, symbol, decimals, total supply | `eth_call` through Sona's RPC router, batched in one Multicall3 call, on free upstreams only | same |
+    | price | Sona's prices service (DefiLlama's free coins API) | same |
+    | market cap | Blockscout's `circulating_market_cap` | GeckoTerminal's `market_cap_usd` |
+    | holder count, top 10 share | Blockscout (`holders_count`, and the first page of holders) | GeckoTerminal (`holders.count`, `distribution_percentage.top_10`) |
+    | holder list | Blockscout, 50 a page, read through and re-paged | the engine's own index, built from HyperSync |
+    | large transfers | HyperSync, the last 7,200 blocks (about a day) or less for a busy token | the engine's own index, the largest of each UTC day over the last 7 days |
+
+    Nothing here calls a paid upstream: every JSON-RPC request carries `X-ERPC-Use-Upstream: !drpc-*`, and `/internal/v1/status` counts any call the router still billed in `paid_rpc_calls`.
+
+    ## A token
+
+    `{token}` is a contract address, `0x` and 40 hex digits in any case. Answers give it in lowercase. An address is a token when it answers both `decimals()` (a value from 0 to 255) and `totalSupply()`. Anything else, an externally owned account or a contract that is no ERC-20, answers 404 `not_found` on every route, and the engine remembers that for 10 minutes.
+
+    ## The Monad index
+
+    Monad has no keyless explorer API with holder lists, so the engine builds its own from the token's `Transfer` logs, read in bulk from Envio HyperSync. It keeps only the current balance of each holder and the largest transfers of each UTC day over the last 7 days, never every transfer. Wrapped MON (`0x3bd359c1119da7da1d913d1c4d2b7c461115433a`) also counts its `Deposit` and `Withdrawal` events, which mint and burn it.
+
+    - **On demand.** The first holder or transfer request for a Monad token queues its backfill and answers at once, with what the index holds so far and an `index` object: `state` is `queued`, then `indexing`, then `ready`. A token in `queued` or `indexing` answers 200 with partial data, never an error. After the backfill a tail keeps every ready token current, about once a minute, a few blocks behind the head. USDC and wrapped MON are queued when the engine starts.
+    - **One at a time.** One backfill runs at a time, and the index holds at most 50 tokens (config `index.max_tokens`). A token past that answers `state: unavailable` with an empty list.
+    - **Two modes.** The HyperSync key is free and shared with Sona's x402 indexer: 15 requests a minute for both, of which this engine uses at most 3 for the index and 2 for visitors. One request covers about 4,000 to 5,000 Monad blocks (half an hour) wherever the token is active, so a token that has been busy for months (USDC needs about 17,000 requests) cannot be indexed from its first transfer. The engine starts every backfill from block 0 in `full` mode and projects its cost from the pages it reads. When two pages in a row project past 120 requests (config `index.backfill_budget`), it switches to `activity` mode: it reads the last 20,000 blocks (about two hours) and from then on follows every address the token moves, reading each one's balance with `balanceOf`. `index.start_block` says where the index starts. In `activity` mode a holder that has not moved the token since `start_block` is missing, and the record says so in `coverage`.
+    - **Positions.** `index.indexed_block` is the last block applied, `index.head_block` the newest block HyperSync knows.
+
+    ## Units
+
+    - An **amount** is `{raw, decimals, value}`: `raw` is the integer the contract holds as a decimal string, `decimals` the token's decimals, and `value` the same amount with the decimal point placed, exact and without trailing zeros, such as `"4312358755.535047"`.
+    - A **share** is a JSON number from 0 to 1, rounded to 10 significant digits: a holder's balance over the total supply, or the top 10 holders' balances over it.
+    - A **dollar figure** (`price_usd`, `fdv_usd`, `market_cap_usd`) is a JSON number. `fdv_usd` is the total supply times `price_usd`.
+    - Times are RFC 3339 in UTC, addresses and hashes are lowercase `0x` hex.
+
+    ## Freshness
+
+    Contract reads are kept 2 minutes (a non-token 10 minutes), the price 1 minute, Blockscout answers 10 minutes, GeckoTerminal answers 15 minutes, and an Ethereum transfer window 15 minutes. A source that has never seen a token (a 404) is remembered for 15 minutes. Concurrent requests for the same key share one fetch, and a fetch keeps running after its caller gives up, so a slow source still fills the cache for the next caller.
+
+    ## Time budget
+
+    The request header `Sona-Deadline-Ms` is the most time, in milliseconds, that a call may take. It is 5000 when the header is absent or is not a whole number. When the budget runs out the answer is 504 `deadline_exceeded`, and a value of 0 or less answers 504 at once. The HTTP server's own write timeout is 10 s. `sona-api` sends the time it has left minus a small margin.
+
+    An Ethereum transfer window needs HyperSync. When the shared quota is spent for the current minute and the budget would end before it resets, the engine starts the read in the background and answers 503 `upstream_unavailable` at once, with `retry_after_s` set to when the read should be done.
+
+    ## Errors
+
+    Every error is `application/problem+json` (RFC 9457) with `Cache-Control: no-store`. Branch on `code`, which is stable:
+
+    | Status | `code` | When |
+    |---|---|---|
+    | 400 | `invalid_query` | an unknown or repeated query parameter, a `limit` out of range, or a `cursor` this engine did not make |
+    | 400 | `invalid_id` | a `{chain}` that is no CAIP-2 id, or a `{token}` that is not `0x` and 40 hex digits |
+    | 404 | `unsupported_chain` | a CAIP-2 chain other than `eip155:1` and `eip155:143` |
+    | 404 | `not_found` | the address is not an ERC-20 token, or no route serves the path (`detail` is then `No such route.`) |
+    | 500 | `internal` | anything unnamed, with the cause in the service log under the `X-Request-Id` |
+    | 503 | `upstream_unavailable` | the chain, the database or the source a route needs did not answer. `retry_after_s` and `Retry-After` say when to try again, from 1 to 60 seconds |
+    | 504 | `deadline_exceeded` | the time budget ran out |
+
+    Only the contract read is required for a token record. When the price, Blockscout or GeckoTerminal fails, the record still answers 200: the fields that source feeds are `null`, `sources` leaves it out and `coverage` holds `token_source_unavailable`. The holder list of Ethereum and the transfer window of Ethereum need their source and answer 503 without it.
+
+    ## How this differs from the public API
+
+    - The body is a bare record, with no `{data, meta}` envelope and no `links`. `sona-api` adds its own.
+    - There are no credits, rate limits or authentication. Access is limited by the network: the service listens only on the Docker network and on `127.0.0.1`.
+    - Successful answers carry no `Cache-Control` or `ETag`. Only `GET` is used.
+servers:
+  - url: http://127.0.0.1:8221
+    description: tokens-engine on the host, serving Ethereum (eip155:1) and Monad (eip155:143)
+tags:
+  - name: Tokens
+    description: |
+      One ERC-20 token: what it is, who holds it and its largest recent transfers.
+  - name: Status
+    description: |
+      The sources, the HyperSync quota and the Monad index.
+  - name: Operations
+    description: |
+      Probes for the container health check. They have no body and no request ID.
+paths:
+  /internal/v1/chains/{chain}/tokens/{token}:
+    parameters:
+      - $ref: '#/components/parameters/Chain'
+      - $ref: '#/components/parameters/Token'
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: getToken
+      tags: [Tokens]
+      summary: Get what a token is, its supply, price, market cap and holder count
+      description: |
+        Call this for the head of a token page. The record holds the token's `name` and `symbol` (`null` when the contract does not answer them; old tokens such as MKR answer a bytes32, which is read as text), `decimals`, `total_supply`, and:
+
+        - `price_usd`: the current price from Sona's prices service, `null` when no price is known (coverage `token_price_unknown`).
+        - `fdv_usd`: `total_supply` times `price_usd`, `null` without a price.
+        - `market_cap_usd`: the circulating market cap a provider reports (Blockscout on Ethereum, GeckoTerminal on Monad), `null` when it reports none. Providers take it from CoinGecko, which counts a token's supply on every chain, so for a bridged token such as USDC it is above this chain's `fdv_usd`. The record then holds `token_market_cap_multichain`.
+        - `holder_count` and `top10_share`: Blockscout's holder count and the share of the 10 largest holders on Ethereum, GeckoTerminal's on Monad (coverage `token_holder_count_provider`). On Monad the count falls back to the index when GeckoTerminal has none and the index of the token is complete.
+        - `sources`: the sources that answered, from `rpc`, `prices`, `blockscout`, `geckoterminal` and `sona_index`.
+
+        This route does not queue the token in the Monad index. It takes no query parameters.
+      responses:
+        "200":
+          description: The address is a token.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TokenInfo'}
+              examples:
+                monad_usdc:
+                  summary: USDC on Monad
+                  value: {"kind": "token_info", "chain": "eip155:143", "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603", "name": "USDC", "symbol": "USDC", "decimals": 6, "total_supply": {"raw": "226181868642795", "decimals": 6, "value": "226181868.642795"}, "price_usd": 0.9998520528303461, "fdv_usd": 226148405.676, "market_cap_usd": 72572702149.0666, "holder_count": 76442, "top10_share": 0.766237, "sources": ["rpc", "prices", "geckoterminal"], "coverage": ["token_market_cap_multichain", "token_holder_count_provider"]}
+                mkr:
+                  summary: MKR on Ethereum, a bytes32 name and symbol
+                  value: {"kind": "token_info", "chain": "eip155:1", "token": "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2", "name": "Maker", "symbol": "MKR", "decimals": 18, "total_supply": {"raw": "83465892107442956720626", "decimals": 18, "value": "83465.892107442956720626"}, "price_usd": 1756.4342141940788, "fdv_usd": 146602348.616, "market_cap_usd": null, "holder_count": 78674, "top10_share": 0.6469578717, "sources": ["rpc", "prices", "blockscout"], "coverage": []}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/chains/{chain}/tokens/{token}/holders:
+    parameters:
+      - $ref: '#/components/parameters/Chain'
+      - $ref: '#/components/parameters/Token'
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: listTokenHolders
+      tags: [Tokens]
+      summary: List the holders of a token, largest first
+      description: |
+        Call this for the holder table of a token page. Each item is a holder's `address`, its `balance` and its `share` of the total supply (`null` when the supply is 0). Pass `next_cursor` back as `cursor` for the next page; it is `null` on the last page. A cursor is opaque and belongs to the chain and token it came from.
+
+        - On Ethereum the list is Blockscout's (`source: blockscout`, coverage `token_holders_ranked_by_provider`), with Blockscout's `is_contract` and its name tag or contract name as `label`. `index` is `null`. `holder_count` is Blockscout's.
+        - On Monad the list is the engine's index (`source: sona_index`), and `is_contract` and `label` are `null`. The first request for a token queues its backfill, and the answer is 200 with what is indexed so far and `index.state` `queued` or `indexing` (coverage `token_index_partial`). In `full` mode the balances are the sum of the token's transfers (coverage `token_balances_from_transfers`) and, once ready, `holder_count` is the index's own count. In `activity` mode (coverage `token_holders_from_activity`) the list holds the addresses active since `index.start_block` with their `balanceOf`, and `holder_count` is GeckoTerminal's. When the index is full the state is `unavailable` and the list is empty (coverage `token_index_unavailable`).
+
+        Errors: 400 `invalid_query` for a `limit` out of range, a malformed cursor or another query key, 404 `not_found` when the address is no token, 503 when Blockscout does not answer on Ethereum or the database does not answer on Monad.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        "200":
+          description: The holders, largest first.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TokenHolders'}
+              examples:
+                ethereum:
+                  summary: USDC on Ethereum, from Blockscout
+                  value: {"kind": "token_holders", "chain": "eip155:1", "token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "items": [{"address": "0x37305b1cd40574e4c5ce33f8e8306be057fd7341", "balance": {"raw": "4312358755535047", "decimals": 6, "value": "4312358755.535047"}, "share": 0.08942195281, "is_contract": false, "label": "Sky: PSM"}], "next_cursor": "eyJvIjoxfQ", "holder_count": 9485911, "source": "blockscout", "index": null, "coverage": ["token_holders_ranked_by_provider"]}
+                monad_indexing:
+                  summary: A Monad token whose backfill was just queued
+                  value: {"kind": "token_holders", "chain": "eip155:143", "token": "0x3bd359c1119da7da1d913d1c4d2b7c461115433a", "items": [], "next_cursor": null, "holder_count": 104220, "source": "sona_index", "index": {"state": "queued", "mode": null, "start_block": null, "indexed_block": null, "head_block": 113083332}, "coverage": ["token_index_partial", "token_holder_count_provider"]}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/chains/{chain}/tokens/{token}/transfers:
+    parameters:
+      - $ref: '#/components/parameters/Chain'
+      - $ref: '#/components/parameters/Token'
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: listTokenTransfers
+      tags: [Tokens]
+      summary: List the largest transfers of a token in a recent window
+      description: |
+        Call this for the "large transfers" table of a token page. Items are the largest `Transfer` events in `window`, largest first, then newest. A mint has `from` and a burn `to` the zero address. `window` gives the first and last block and their times.
+
+        - On Ethereum (`source: hypersync`) the window is the last 7,200 blocks, about a day. For a busy token one HyperSync request covers only a few dozen blocks, so the engine shortens the window until three requests cover it, remembers that length for 6 hours, and says so with `token_transfer_window_cut`. The window is kept 15 minutes. When the HyperSync quota is spent, the answer is 503 with `retry_after_s`, and the read goes on in the background.
+        - On Monad (`source: sona_index`) the index keeps the 100 largest transfers of each UTC day over the last 7 days, from the token's backfill and tail. The window starts at the first block of the oldest day, or at `index.start_block` when the index starts later, and ends at `index.indexed_block`. The first request queues the token like the holder route, and `window` is `null` until the index has read a block.
+
+        Errors: 400 `invalid_query` for a `limit` out of range or another query key, 404 `not_found` when the address is no token, 503 when HyperSync or the database does not answer.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        "200":
+          description: The largest transfers of the window.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TokenTransfers'}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/status:
+    parameters:
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: getStatus
+      tags: [Status]
+      summary: Get the state of the engine and its Monad index
+      description: |
+        Call this to see the chains served, the paid RPC calls (`paid_rpc_calls`, which should stay 0), the HyperSync quota use, and the Monad index: each token with its state, mode, first and last indexed block, holder count and the HyperSync requests its backfill spent, the backfill that runs now with its projected cost, when the tail last caught up, and the disk the index uses. `coverage` lists every coverage code the token records can carry, each with its sentence. It takes no query parameters.
+      responses:
+        "200":
+          description: The state of the engine.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Status'}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /healthz:
+    get:
+      operationId: getHealth
+      tags: [Operations]
+      summary: Check that the process is alive
+      description: |
+        The liveness probe. It answers 200 with an empty body as long as the process runs. It sends no `X-Request-Id`.
+      responses:
+        "200": {description: 'The process is running. The body is empty.'}
+  /readyz:
+    get:
+      operationId: getReady
+      tags: [Operations]
+      summary: Check that the service can answer requests
+      description: |
+        The readiness probe. It answers 200 when the database answers a ping (checked at most every 2 seconds) and 503 otherwise, with an empty body. The outside sources are not part of it, because the token records answer without most of them.
+      responses:
+        "200": {description: 'The database answers. The body is empty.'}
+        "503": {description: 'The database does not answer. The body is empty.'}
+components:
+  parameters:
+    Chain:
+      name: chain
+      in: path
+      required: true
+      description: |
+        The chain, as a CAIP-2 id: `eip155:1` (Ethereum) or `eip155:143` (Monad). A value that is no CAIP-2 id answers 400 `invalid_id`, and any other chain answers 404 `unsupported_chain`.
+      schema: {type: string}
+      examples:
+        ethereum: {summary: Ethereum, value: "eip155:1"}
+        monad: {summary: Monad, value: "eip155:143"}
+    Token:
+      name: token
+      in: path
+      required: true
+      description: |
+        The token contract, `0x` and 40 hex digits in any case. Anything else answers 400 `invalid_id`.
+      schema: {type: string, pattern: '^0[xX][0-9a-fA-F]{40}$'}
+      examples:
+        monad_usdc: {summary: USDC on Monad, value: "0x754704bc059f8c67012fed69bc8a327a5aafb603"}
+        eth_usdc: {summary: USDC on Ethereum, value: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: How many items to return, from 1 to 100. The default is 25.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: The `next_cursor` of the page before. Leave it out for the first page.
+      schema: {type: string, maxLength: 512, pattern: '^[A-Za-z0-9_-]+$'}
+    DeadlineMs:
+      name: Sona-Deadline-Ms
+      in: header
+      required: false
+      description: |
+        The most time, in milliseconds, that this call may take. The default is 5000, used when the header is absent or is not a whole number. A value of 0 or less answers 504 at once.
+      schema: {type: integer, format: int64}
+  headers:
+    RequestId:
+      description: A 32-character hex ID that identifies this one request in the service log. It is the trace ID of the incoming `traceparent` header, or a random one. It is on every answer except `/healthz` and `/readyz`.
+      schema: {type: string, pattern: '^[0-9a-f]{32}$'}
+    RetryAfter:
+      description: How many whole seconds to wait before you send the request again, from 1 to 60.
+      required: true
+      schema: {type: integer, minimum: 1, maximum: 60}
+    NoStore:
+      description: Always `no-store` on an error answer.
+      required: true
+      schema: {type: string, enum: [no-store]}
+  responses:
+    InvalidRequest:
+      description: A parameter is not accepted. `invalid_query` is an unknown or repeated query parameter, a value out of range or a cursor this engine did not make, and `invalid_id` is a chain that is no CAIP-2 id or a token that is no address.
+      headers: &problemHeaders
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+        X-Request-Id: {$ref: '#/components/headers/RequestId'}
+      content:
+        application/problem+json:
+          schema: {allOf: [{$ref: '#/components/schemas/Problem'}, {properties: {code: {enum: [invalid_query, invalid_id]}}}]}
+          examples:
+            limit:
+              summary: A limit out of range
+              value: {"type": "urn:sona:problem:invalid_query", "title": "Invalid query", "status": 400, "detail": "limit is a whole number from 1 to 100.", "instance": "/internal/v1/chains/eip155:1/tokens/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48/holders", "code": "invalid_query"}
+            token:
+              summary: A token that is no address
+              value: {"type": "urn:sona:problem:invalid_id", "title": "Invalid identifier", "status": 400, "detail": "A token is 0x and 40 hex digits.", "instance": "/internal/v1/chains/eip155:1/tokens/usdc", "code": "invalid_id"}
+    NotFound:
+      description: Nothing is there. `unsupported_chain` is a CAIP-2 chain the engine does not serve, and `not_found` an address that is no ERC-20 token or a path that no route serves (`detail` is then `No such route.`).
+      headers: *problemHeaders
+      content:
+        application/problem+json:
+          schema: {allOf: [{$ref: '#/components/schemas/Problem'}, {properties: {code: {enum: [unsupported_chain, not_found]}}}]}
+          examples:
+            not_a_token:
+              summary: An externally owned account
+              value: {"type": "urn:sona:problem:not_found", "title": "Not found", "status": 404, "detail": "This address is not an ERC-20 token: it answers neither decimals nor totalSupply.", "instance": "/internal/v1/chains/eip155:1/tokens/0x37305b1cd40574e4c5ce33f8e8306be057fd7341", "code": "not_found"}
+            unsupported_chain:
+              summary: Another chain
+              value: {"type": "urn:sona:problem:unsupported_chain", "title": "Unsupported chain", "status": 404, "detail": "Only eip155:1 and eip155:143 are served.", "instance": "/internal/v1/chains/eip155:8453/tokens/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "code": "unsupported_chain"}
+    Internal:
+      description: The service failed in a way it has no name for (`internal`). Report the `X-Request-Id`.
+      headers: *problemHeaders
+      content:
+        application/problem+json:
+          schema: {allOf: [{$ref: '#/components/schemas/Problem'}, {properties: {code: {enum: [internal]}}}]}
+    Unavailable:
+      description: A source the answer needs did not answer (`upstream_unavailable`). `Retry-After` and `retry_after_s` say when to try again.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+        Retry-After: {$ref: '#/components/headers/RetryAfter'}
+        X-Request-Id: {$ref: '#/components/headers/RequestId'}
+      content:
+        application/problem+json:
+          schema: {allOf: [{$ref: '#/components/schemas/Problem'}, {properties: {code: {enum: [upstream_unavailable]}}}]}
+          examples:
+            quota:
+              summary: The HyperSync quota is spent for this minute
+              value: {"type": "urn:sona:problem:upstream_unavailable", "title": "Data source unavailable", "status": 503, "detail": "The data source hypersync did not answer.", "instance": "/internal/v1/chains/eip155:1/tokens/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48/transfers", "code": "upstream_unavailable", "retry_after_s": 31}
+    DeadlineExceeded:
+      description: The time budget ran out (`deadline_exceeded`).
+      headers: *problemHeaders
+      content:
+        application/problem+json:
+          schema: {allOf: [{$ref: '#/components/schemas/Problem'}, {properties: {code: {enum: [deadline_exceeded]}}}]}
+    ClientClosed:
+      description: The caller closed the connection before the answer was ready. The status is the one nginx uses for that, and the body is empty. It only shows in the request metrics.
+      headers:
+        X-Request-Id: {$ref: '#/components/headers/RequestId'}
+  schemas:
+    Problem:
+      description: An error in the RFC 9457 `application/problem+json` format. Switch on `code`.
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code]
+      properties:
+        type: {type: string, description: '`urn:sona:problem:` followed by the `code`.'}
+        title: {type: string, description: 'A short, fixed name for the kind of error.'}
+        status: {type: integer, description: 'The HTTP status, repeated.'}
+        detail: {type: string, description: 'A sentence for people. Do not parse it.'}
+        instance: {type: string, description: 'The path of the request.'}
+        code:
+          type: string
+          enum: [invalid_query, invalid_id, unsupported_chain, not_found, internal, upstream_unavailable, deadline_exceeded]
+        retry_after_s: {type: integer, minimum: 1, maximum: 60, description: 'Seconds to wait before a retry. Only on 503.'}
+    Chain:
+      type: string
+      enum: ["eip155:1", "eip155:143"]
+    Address:
+      type: string
+      pattern: '^0x[0-9a-f]{40}$'
+      description: A lowercase address.
+    Hash:
+      type: string
+      pattern: '^0x[0-9a-f]{64}$'
+    Time:
+      type: string
+      format: date-time
+      description: RFC 3339 in UTC.
+    Block:
+      type: integer
+      minimum: 0
+    Share:
+      type: number
+      minimum: 0
+      description: A fraction from 0 to 1, rounded to 10 significant digits. A balance read from transfers can be a little off for a token that changes balances without events, so a share can stray past 1 for such a token.
+    Usd:
+      type: [number, "null"]
+      minimum: 0
+    Amount:
+      type: object
+      additionalProperties: false
+      required: [raw, decimals, value]
+      description: A token quantity.
+      properties:
+        raw: {type: string, pattern: '^-?[0-9]+$', description: 'The integer the contract holds, in decimal.'}
+        decimals: {type: integer, minimum: 0, maximum: 255}
+        value: {type: string, pattern: '^-?[0-9]+(\.[0-9]*[1-9])?$', description: '`raw` with the decimal point placed, exact, without trailing zeros.'}
+    Source:
+      type: string
+      enum: [rpc, prices, blockscout, geckoterminal, hypersync, sona_index]
+    CoverageCode:
+      type: string
+      enum: [token_price_unknown, token_source_unavailable, token_market_cap_multichain, token_index_partial, token_index_unavailable, token_holders_from_activity, token_balances_from_transfers, token_transfer_window_cut, token_holder_count_provider, token_holders_ranked_by_provider]
+      description: |
+        A limit that applies to the answer. `token_price_unknown` no price is known. `token_source_unavailable` a source failed and its fields are null. `token_market_cap_multichain` the provider's market cap counts the token on other chains too. `token_index_partial` the Monad index of the token is still being built. `token_index_unavailable` the index cannot take the token now. `token_holders_from_activity` the index follows the addresses active since `index.start_block`. `token_balances_from_transfers` balances are sums of transfer events. `token_transfer_window_cut` the Ethereum window is shorter than 7,200 blocks. `token_holder_count_provider` holder figures come from GeckoTerminal. `token_holders_ranked_by_provider` the holder list is Blockscout's.
+    Coverage:
+      type: array
+      items: {$ref: '#/components/schemas/CoverageCode'}
+      description: The limits that apply, in a fixed order, empty when none does.
+    TokenInfo:
+      type: object
+      additionalProperties: false
+      required: [kind, chain, token, name, symbol, decimals, total_supply, price_usd, fdv_usd, market_cap_usd, holder_count, top10_share, sources, coverage]
+      properties:
+        kind: {type: string, enum: [token_info]}
+        chain: {$ref: '#/components/schemas/Chain'}
+        token: {$ref: '#/components/schemas/Address'}
+        name: {type: [string, "null"], maxLength: 128, description: 'The contract''s name, null when it does not answer one.'}
+        symbol: {type: [string, "null"], maxLength: 128}
+        decimals: {type: integer, minimum: 0, maximum: 255}
+        total_supply: {$ref: '#/components/schemas/Amount'}
+        price_usd: {$ref: '#/components/schemas/Usd'}
+        fdv_usd: {$ref: '#/components/schemas/Usd'}
+        market_cap_usd: {$ref: '#/components/schemas/Usd'}
+        holder_count: {type: [integer, "null"], minimum: 0}
+        top10_share: {type: [number, "null"], minimum: 0}
+        sources: {type: array, items: {$ref: '#/components/schemas/Source'}}
+        coverage: {$ref: '#/components/schemas/Coverage'}
+    IndexState:
+      type: object
+      additionalProperties: false
+      required: [state, mode, start_block, indexed_block, head_block]
+      description: How far the Monad index of the token is.
+      properties:
+        state:
+          type: string
+          enum: [ready, indexing, queued, unavailable]
+          description: '`queued` waits for its backfill, `indexing` is being backfilled, `ready` is followed by the tail, `unavailable` cannot be indexed now (the index is full, or the backfill failed and waits for a retry).'
+        mode:
+          type: [string, "null"]
+          enum: [full, activity, null]
+          description: '`full` from the first transfer, `activity` from `start_block` with balances read by balanceOf. Null while queued.'
+        start_block: {type: [integer, "null"], minimum: 0, description: 'The first block the index reads.'}
+        indexed_block: {type: [integer, "null"], minimum: 0, description: 'The last block applied, null before the first.'}
+        head_block: {type: [integer, "null"], minimum: 0, description: 'The newest block HyperSync knows.'}
+    Holder:
+      type: object
+      additionalProperties: false
+      required: [address, balance, share, is_contract, label]
+      properties:
+        address: {$ref: '#/components/schemas/Address'}
+        balance: {$ref: '#/components/schemas/Amount'}
+        share: {type: [number, "null"]}
+        is_contract: {type: [boolean, "null"], description: 'Blockscout''s flag on Ethereum, null on Monad.'}
+        label: {type: [string, "null"], maxLength: 80, description: 'Blockscout''s name tag or contract name on Ethereum, null on Monad or without one.'}
+    TokenHolders:
+      type: object
+      additionalProperties: false
+      required: [kind, chain, token, items, next_cursor, holder_count, source, index, coverage]
+      properties:
+        kind: {type: string, enum: [token_holders]}
+        chain: {$ref: '#/components/schemas/Chain'}
+        token: {$ref: '#/components/schemas/Address'}
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Holder'}}
+        next_cursor: {type: [string, "null"], description: 'The cursor of the next page, null on the last page.'}
+        holder_count: {type: [integer, "null"], minimum: 0}
+        source: {type: string, enum: [blockscout, sona_index]}
+        index:
+          oneOf:
+            - {$ref: '#/components/schemas/IndexState'}
+            - {type: "null"}
+          description: The Monad index of the token, null on Ethereum.
+        coverage: {$ref: '#/components/schemas/Coverage'}
+    Window:
+      type: object
+      additionalProperties: false
+      required: [from_block, to_block, from_time, to_time]
+      properties:
+        from_block: {$ref: '#/components/schemas/Block'}
+        to_block: {$ref: '#/components/schemas/Block'}
+        from_time: {$ref: '#/components/schemas/Time'}
+        to_time: {$ref: '#/components/schemas/Time'}
+    Transfer:
+      type: object
+      additionalProperties: false
+      required: [tx, log_index, block, time, from, to, amount]
+      properties:
+        tx: {$ref: '#/components/schemas/Hash'}
+        log_index: {type: integer, minimum: 0}
+        block: {$ref: '#/components/schemas/Block'}
+        time: {$ref: '#/components/schemas/Time'}
+        from: {$ref: '#/components/schemas/Address'}
+        to: {$ref: '#/components/schemas/Address'}
+        amount: {$ref: '#/components/schemas/Amount'}
+    TokenTransfers:
+      type: object
+      additionalProperties: false
+      required: [kind, chain, token, window, items, source, index, coverage]
+      properties:
+        kind: {type: string, enum: [token_transfers]}
+        chain: {$ref: '#/components/schemas/Chain'}
+        token: {$ref: '#/components/schemas/Address'}
+        window:
+          oneOf:
+            - {$ref: '#/components/schemas/Window'}
+            - {type: "null"}
+          description: The blocks and times the items come from, null on Monad before the index has read a block.
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Transfer'}}
+        source: {type: string, enum: [hypersync, sona_index]}
+        index:
+          oneOf:
+            - {$ref: '#/components/schemas/IndexState'}
+            - {type: "null"}
+        coverage: {$ref: '#/components/schemas/Coverage'}
+    Note:
+      type: object
+      additionalProperties: false
+      required: [code, note]
+      properties:
+        code: {$ref: '#/components/schemas/CoverageCode'}
+        note: {type: string}
+    Status:
+      type: object
+      additionalProperties: false
+      required: [kind, chains, paid_rpc_calls, hypersync, index, coverage]
+      properties:
+        kind: {type: string, enum: [tokens_status]}
+        chains:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [chain, name, holders]
+            properties:
+              chain: {$ref: '#/components/schemas/Chain'}
+              name: {type: string}
+              holders: {type: string, enum: [blockscout, index], description: 'Where the chain''s holder list comes from.'}
+        paid_rpc_calls: {type: integer, minimum: 0, description: 'JSON-RPC calls since the start that the router billed to a paid upstream. It should stay 0.'}
+        hypersync:
+          type: object
+          additionalProperties: false
+          required: [enabled, background_per_minute, interactive_per_minute, requests, rate_limited, failed, paused_s]
+          properties:
+            enabled: {type: boolean}
+            background_per_minute: {type: number, description: 'Requests a minute the index may send.'}
+            interactive_per_minute: {type: number, description: 'Requests a minute visitors'' transfer windows may send.'}
+            requests: {type: integer, minimum: 0}
+            rate_limited: {type: integer, minimum: 0, description: 'Requests answered 429 because the shared quota was spent.'}
+            failed: {type: integer, minimum: 0}
+            paused_s: {type: integer, minimum: 0, description: 'Seconds until the quota window resets, 0 when the engine may send.'}
+        index:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [chain, head_block, max_tokens, backfill_budget, counts, disk_bytes, backfill, tail_at, tail_error, tokens]
+              properties:
+                chain: {$ref: '#/components/schemas/Chain'}
+                head_block: {type: [integer, "null"]}
+                max_tokens: {type: integer}
+                backfill_budget: {type: integer, description: 'The HyperSync requests a full backfill may take before the token switches to activity mode.'}
+                counts:
+                  type: object
+                  additionalProperties: false
+                  required: [queued, indexing, ready, failed]
+                  properties:
+                    queued: {type: integer}
+                    indexing: {type: integer}
+                    ready: {type: integer}
+                    failed: {type: integer}
+                disk_bytes: {type: integer, minimum: 0, description: 'Disk of the index tables with their indexes.'}
+                backfill:
+                  oneOf:
+                    - type: object
+                      additionalProperties: false
+                      required: [token, mode, next_block, head_block, requests, projected_requests, started_at]
+                      properties:
+                        token: {$ref: '#/components/schemas/Address'}
+                        mode: {type: string, enum: [full, activity]}
+                        next_block: {type: integer}
+                        head_block: {type: integer}
+                        requests: {type: integer}
+                        projected_requests: {type: [integer, "null"], description: 'The requests a full backfill would take in all, at the pace of the latest page.'}
+                        started_at: {$ref: '#/components/schemas/Time'}
+                    - {type: "null"}
+                tail_at: {type: [string, "null"], format: date-time}
+                tail_error: {type: [string, "null"]}
+                tokens:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [token, state, mode, start_block, indexed_block, holders, requests, backfill_s, last_error]
+                    properties:
+                      token: {$ref: '#/components/schemas/Address'}
+                      state: {type: string, enum: [queued, indexing, ready, failed]}
+                      mode: {type: string, enum: [full, activity]}
+                      start_block: {type: integer}
+                      indexed_block: {type: [integer, "null"]}
+                      holders: {type: integer, minimum: 0}
+                      requests: {type: integer, minimum: 0, description: 'HyperSync requests the backfill spent.'}
+                      backfill_s: {type: [number, "null"], description: 'Seconds from the first start of the backfill to ready.'}
+                      last_error: {type: [string, "null"]}
+            - {type: "null"}
+        coverage: {type: array, items: {$ref: '#/components/schemas/Note'}}
