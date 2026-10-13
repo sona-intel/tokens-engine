@@ -214,3 +214,6 @@ func change(now, old float64) *float64 {
 	v := (now/old - 1) * 100
 	return pct(&v)
 }
+
+// cents rounds dollars to the cent, which drops float noise such as 567295794.0999999
+func cents(v float64) float64 { return math.Round(v*100) / 100 }

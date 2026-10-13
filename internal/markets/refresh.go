@@ -116,7 +116,7 @@ func buildProtocols(rows []sources.ProtocolRow) protocolSet {
 		if excludedCategories[r.Category] || r.TVL <= 0 || math.IsNaN(r.TVL) || math.IsInf(r.TVL, 0) {
 			continue
 		}
-		p := Protocol{Name: sources.CleanText(r.Name), Slug: r.Slug, Category: sources.CleanText(r.Category), TVLUSD: r.TVL, Change1dPct: pct(r.Change1D), Change7dPct: pct(r.Change7D)}
+		p := Protocol{Name: sources.CleanText(r.Name), Slug: r.Slug, Category: sources.CleanText(r.Category), TVLUSD: cents(r.TVL), Change1dPct: pct(r.Change1D), Change7dPct: pct(r.Change7D)}
 		if u := sources.HTTPSURL(r.Logo); u != "" {
 			p.LogoURL = &u
 		}
@@ -126,7 +126,7 @@ func buildProtocols(rows []sources.ProtocolRow) protocolSet {
 			c = &Category{Category: p.Category}
 			cats[p.Category] = c
 		}
-		c.TVLUSD += p.TVLUSD
+		c.TVLUSD = cents(c.TVLUSD + p.TVLUSD)
 		c.Protocols++
 	}
 	slices.SortFunc(items, func(a, b Protocol) int {
@@ -172,7 +172,7 @@ func (s *Service) RefreshStablecoins(ctx context.Context) error {
 func buildStable(list []sources.Stablecoin, chart []sources.StablePoint) stableSet {
 	items := make([]Stablecoin, 0, len(list))
 	for _, c := range list {
-		items = append(items, Stablecoin{Symbol: sources.CleanText(c.Symbol), Name: sources.CleanText(c.Name), CirculatingUSD: c.Circulating})
+		items = append(items, Stablecoin{Symbol: sources.CleanText(c.Symbol), Name: sources.CleanText(c.Name), CirculatingUSD: cents(c.Circulating)})
 	}
 	slices.SortFunc(items, func(a, b Stablecoin) int {
 		return cmp.Or(cmp.Compare(b.CirculatingUSD, a.CirculatingUSD), cmp.Compare(a.Symbol, b.Symbol))
@@ -209,7 +209,7 @@ func buildDex(o sources.DexOverview) dexSet {
 	chart = chart[max(0, len(chart)-historyDays):]
 	out := dexSet{total24h: o.Total24h, total7d: o.Total7d, total30d: o.Total30d, change1d: pct(o.Change1d), chart: make([]VolumePoint, 0, len(chart))}
 	for _, p := range chart {
-		out.chart = append(out.chart, VolumePoint{Day: day(p.Date), VolumeUSD: p.Volume})
+		out.chart = append(out.chart, VolumePoint{Day: day(p.Date), VolumeUSD: cents(p.Volume)})
 	}
 	for _, p := range o.Protocols {
 		if p.V24h == nil || *p.V24h <= 0 || len(out.protocols) == topLists {
