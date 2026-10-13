@@ -103,10 +103,12 @@ type Service struct {
 	gtCap     *cache.Cache[*float64]
 	price     *cache.Cache[*float64]
 	windows   *cache.Cache[ethWindow]
-	headers   *cache.Cache[rpc.Header]
-	blockAt   *cache.Cache[uint64]
-	gtSearch  *cache.Cache[[]sources.GeckoHit]
-	idxMeta   *cache.Cache[Meta]
+	// lastGood keeps the newest good window of each token past its freshness, for when HyperSync fails
+	lastGood *cache.Cache[goodWindow]
+	headers  *cache.Cache[rpc.Header]
+	blockAt  *cache.Cache[uint64]
+	gtSearch *cache.Cache[[]sources.GeckoHit]
+	idxMeta  *cache.Cache[Meta]
 
 	// learned is the transfer window that fit the HyperSync budget last time, per Ethereum token
 	learned sync.Map
@@ -125,6 +127,7 @@ func New(d Deps) *Service {
 		gtCap:     cache.New[*float64](cacheEntries, fetchTimeout),
 		price:     cache.New[*float64](cacheEntries, fetchTimeout),
 		windows:   cache.New[ethWindow](1024, 2*fetchTimeout),
+		lastGood:  cache.New[goodWindow](1024, fetchTimeout),
 		headers:   cache.New[rpc.Header](cacheEntries, fetchTimeout),
 		blockAt:   cache.New[uint64](64, fetchTimeout),
 		gtSearch:  cache.New[[]sources.GeckoHit](512, searchFetch),

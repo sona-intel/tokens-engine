@@ -76,3 +76,126 @@ func TestPacerPauseAndCancel(t *testing.T) {
 		t.Errorf("%d waiters left after cancel", left)
 	}
 }
+
+// fakeClock drives a pacer without real waiting
+type fakeClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *fakeClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *fakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	c.t = c.t.Add(d)
+	c.mu.Unlock()
+}
+
+func jobPacer(c *fakeClock) *Pacer {
+	p := NewPacer(2, 2).WithJobLane(1, time.Minute)
+	p.now = c.now
+	p.last = c.now()
+	return p
+}
+
+func granted(p *Pacer, prio Priority) (ch chan struct{}) {
+	ch = make(chan struct{})
+	p.mu.Lock()
+	p.waiting[prio] = append(p.waiting[prio], ch)
+	p.dispatchLocked()
+	p.mu.Unlock()
+	return ch
+}
+
+func isOpen(ch chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+func TestPacerJobLeavesASlotForVisitors(t *testing.T) {
+	c := &fakeClock{t: time.Unix(1000, 0)}
+	p := jobPacer(c)
+	job := granted(p, Job)
+	if !isOpen(job) {
+		t.Fatal("a full bucket should grant a job")
+	}
+	// the job took one of two slots: a visitor that arrives right after is served without waiting
+	if !isOpen(granted(p, Interactive)) {
+		t.Error("a visitor waited behind a job")
+	}
+}
+
+func TestPacerJobWaitsForReserveAndGap(t *testing.T) {
+	c := &fakeClock{t: time.Unix(1000, 0)}
+	p := jobPacer(c)
+	if !isOpen(granted(p, Job)) {
+		t.Fatal("first job")
+	}
+	second := granted(p, Job)
+	// 30 s refills the bucket to two slots but the jobs are not a minute apart yet
+	c.advance(30 * time.Second)
+	p.mu.Lock()
+	p.dispatchLocked()
+	p.mu.Unlock()
+	if isOpen(second) {
+		t.Error("a second job ran within the minute")
+	}
+	c.advance(31 * time.Second)
+	p.mu.Lock()
+	p.dispatchLocked()
+	p.mu.Unlock()
+	if !isOpen(second) {
+		t.Error("the second job did not run a minute later")
+	}
+}
+
+func TestPacerVisitorsBeatWaitingJobs(t *testing.T) {
+	c := &fakeClock{t: time.Unix(1000, 0)}
+	p := jobPacer(c)
+	// spend the bucket on visitors, then queue a job and another visitor: the visitor gets the next slot
+	granted(p, Interactive)
+	granted(p, Interactive)
+	job := granted(p, Job)
+	visitor := granted(p, Interactive)
+	c.advance(31 * time.Second)
+	p.mu.Lock()
+	p.dispatchLocked()
+	p.mu.Unlock()
+	if !isOpen(visitor) || isOpen(job) {
+		t.Errorf("visitor %v, job %v after one slot", isOpen(visitor), isOpen(job))
+	}
+}
+
+func TestPacerJobTotalStaysInBudget(t *testing.T) {
+	c := &fakeClock{t: time.Unix(1000, 0)}
+	p := jobPacer(c)
+	n := 0
+	var chs []chan struct{}
+	for range 5 {
+		chs = append(chs, granted(p, Job))
+		chs = append(chs, granted(p, Interactive))
+	}
+	for range 120 {
+		c.advance(time.Second)
+		p.mu.Lock()
+		p.dispatchLocked()
+		p.mu.Unlock()
+	}
+	for _, ch := range chs {
+		if isOpen(ch) {
+			n++
+		}
+	}
+	// 2 a minute with a burst of 2 is at most 2 + 4 grants in 2 minutes
+	if n > 6 {
+		t.Errorf("%d grants in 2 minutes", n)
+	}
+}

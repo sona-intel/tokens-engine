@@ -30,6 +30,8 @@ const (
 	// interactiveAttempts lets a visitor's query wait out one or two quota windows, it runs detached from the visitor
 	interactiveAttempts = 3
 	serverErrorPause    = 10 * time.Second
+	// jobGap is the least time between two requests of Job priority
+	jobGap = time.Minute
 )
 
 var ErrNoKey = errors.New("hypersync key is not set")
@@ -77,7 +79,7 @@ type HyperSync struct {
 	urls map[string]string
 	key  config.Secret
 	hc   *http.Client
-	// background work and visitors' requests each keep to their own share of the quota
+	// background work and visitors' requests each keep to their own share of the quota, Job requests use the visitors' share
 	pacers [2]*Pacer
 
 	requests    atomic.Int64
@@ -92,7 +94,9 @@ func NewHyperSync(urls map[string]string, key config.Secret, background, interac
 	// a burst of a minute's share lets the engine send its requests in the first seconds of a quota window,
 	// before x402-indexer has spent the window
 	h.pacers[Background] = NewPacer(background, max(int(background), 1))
-	h.pacers[Interactive] = NewPacer(interactive, max(int(interactive), 1))
+	// holder-map jobs ride the visitors' pacer but yield: a job's request needs a second slot in the bucket so a
+	// visitor arriving right after still finds one, and jobs are a minute apart
+	h.pacers[Interactive] = NewPacer(interactive, max(int(interactive), 1)).WithJobLane(1, jobGap)
 	return h
 }
 
@@ -205,12 +209,12 @@ func (h *HyperSync) Page(ctx context.Context, chain string, q LogQuery, prio Pri
 	if err != nil {
 		return Page{}, fmt.Errorf("hypersync request: %w", err)
 	}
-	attempts := backgroundAttempts
-	if prio == Interactive {
-		attempts = interactiveAttempts
+	attempts, pacer := backgroundAttempts, h.pacers[Background]
+	if prio != Background {
+		attempts, pacer = interactiveAttempts, h.pacers[Interactive]
 	}
 	for attempt := 1; ; attempt++ {
-		if err := h.pacers[prio].Wait(ctx, prio); err != nil {
+		if err := pacer.Wait(ctx, prio); err != nil {
 			return Page{}, err
 		}
 		h.requests.Add(1)

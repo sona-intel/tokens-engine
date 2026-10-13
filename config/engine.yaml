@@ -24,7 +24,8 @@ geckoterminal_network: monad
 geckoterminal_per_minute: 20
 prices_url: http://prices:8080
 # the HyperSync key allows 15 requests a minute for everyone and x402-indexer uses most of them:
-# the index (backfill and tail) keeps to 3, visitors' Ethereum transfer windows to 2
+# the index (backfill and tail) keeps to 3, visitors' Ethereum transfer windows to 2.
+# Holder-map jobs take their requests from the same 2, behind every visitor: at most 1 a minute, and only while a slot stays free
 hypersync_per_minute: 3
 hypersync_interactive_per_minute: 2
 meta_cache: 2m
@@ -84,7 +85,8 @@ markets:
     - id: "eip155:143"
       llama_name: Monad
 # Holder map: bubbles for the largest holders, and on Ethereum links between holders that sent each other the token.
-# Links come from HyperSync in a background job on the visitors' share of the quota (hypersync_interactive_per_minute).
+# Links come from HyperSync in a background job on the visitors' share of the quota (hypersync_interactive_per_minute),
+# at a lower priority than visitors and at most 1 request a minute, so a map of 8 requests takes about 8 minutes.
 holder_map:
   window_days: 30
   # at most this many HyperSync requests per map, a busy token gets a shorter window

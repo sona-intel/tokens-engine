@@ -59,6 +59,13 @@ func (c *Cache[V]) Get(ctx context.Context, key string, ttl TTL[V], fetch func(c
 	}
 }
 
+// Set stores a value for d, replacing any entry under key
+func (c *Cache[V]) Set(key string, v V, d time.Duration) {
+	if d > 0 {
+		c.store(key, entry[V]{v: v, expires: c.now().Add(d)})
+	}
+}
+
 // Peek returns a live entry without fetching
 func (c *Cache[V]) Peek(key string) (V, error, bool) {
 	e, ok := c.lookup(key)

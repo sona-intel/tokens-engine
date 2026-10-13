@@ -50,8 +50,10 @@ type Fakes struct {
 	GeckoDown  bool
 	ListsDown  bool
 	HyperDown  bool
-	IndexFull  bool
-	IndexState string
+	// HyperNoTimes drops the block times from the logs, as an incomplete answer would
+	HyperNoTimes bool
+	IndexFull    bool
+	IndexState   string
 	// IndexMode is the mode of the indexed Monad USDC, activity unless a test sets full
 	IndexMode   string
 	HyperCalls  int
@@ -78,6 +80,12 @@ func Service(t testing.TB) (*tokens.Service, *Fakes) {
 	return build(t, curated)
 }
 
+// ShortTransferCache is the same service whose Ethereum transfer windows stay fresh for 20 ms only, to test what is served after that
+func ShortTransferCache(t testing.TB) (*tokens.Service, *Fakes) {
+	t.Helper()
+	return build(t, shortCache)
+}
+
 // Uncurated is the same service with no curated token list, so a search finds only what GeckoTerminal and the index know
 func Uncurated(t testing.TB) (*tokens.Service, *Fakes) {
 	t.Helper()
@@ -96,12 +104,16 @@ const (
 	curated listMode = iota
 	uncurated
 	listsFailed
+	shortCache
 )
 
 func build(t testing.TB, mode listMode) (*tokens.Service, *Fakes) {
 	t.Helper()
 	f := &Fakes{IndexState: store.StateReady, IndexMode: store.ModeActivity, ListsDown: mode == listsFailed}
 	cfg := Config()
+	if mode == shortCache {
+		cfg.TransfersCache = 20 * time.Millisecond
+	}
 	bs := serve(t, f, map[string]string{
 		"/api/v2/tokens/" + EthUSDC.String():              "blockscout/token.usdc.json",
 		"/api/v2/tokens/" + EthMKR.String():               "blockscout/token.mkr.json",
@@ -274,7 +286,7 @@ type fakeLogs struct {
 func (l *fakeLogs) Page(_ context.Context, _ string, q sources.LogQuery, _ sources.Priority) (sources.Page, error) {
 	l.f.mu.Lock()
 	l.f.HyperCalls++
-	down := l.f.HyperDown
+	down, noTimes := l.f.HyperDown, l.f.HyperNoTimes
 	l.f.mu.Unlock()
 	if down {
 		return sources.Page{}, &sources.UnavailableError{Source: "hypersync", RetryAfter: 20 * time.Second, Err: errors.New("429")}
@@ -282,6 +294,9 @@ func (l *fakeLogs) Page(_ context.Context, _ string, q sources.LogQuery, _ sourc
 	out := sources.Page{NextBlock: min(q.To, l.page.NextBlock), ArchiveHeight: l.head}
 	for _, x := range l.page.Logs {
 		if x.Block >= q.From && x.Block < q.To && slices.Contains(q.Addresses, x.Address) {
+			if noTimes {
+				x.Time = 0
+			}
 			out.Logs = append(out.Logs, x)
 		}
 	}

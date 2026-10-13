@@ -316,7 +316,7 @@ func (b *Builder) read(ctx context.Context, j job, from, end uint64) (reading, e
 // page asks again when HyperSync stays unavailable, the client itself waits for the quota between asks
 func (b *Builder) page(ctx context.Context, chain string, q sources.LogQuery) (sources.Page, error) {
 	for attempt := 1; ; attempt++ {
-		p, err := b.logs.Page(ctx, chain, q, sources.Interactive)
+		p, err := b.logs.Page(ctx, chain, q, sources.Job)
 		var ue *sources.UnavailableError
 		if err == nil || !errors.As(err, &ue) || attempt >= pageAttempts {
 			return p, err

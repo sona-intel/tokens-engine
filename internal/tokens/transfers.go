@@ -28,11 +28,21 @@ type learnedWindow struct {
 	at     time.Time
 }
 
+// goodWindow is a window that was served, with the block times its answer gave
+type goodWindow struct {
+	w      ethWindow
+	window Window
+}
+
+// olderKeep is how long a good window is kept past its freshness for a failing source
+const olderKeep = 6 * time.Hour
+
 // ethWindow is the largest transfers of one token over the recent blocks, as fetched from HyperSync
 type ethWindow struct {
 	From, To  uint64
 	Transfers []store.Transfer
 	Cut       bool
+	ReadAt    time.Time
 }
 
 // Transfers returns the largest transfers of a token over a recent window
@@ -84,37 +94,63 @@ func (s *Service) window(ctx context.Context, chain string, client Chain, from, 
 
 func (s *Service) hyperSyncWindow(ctx context.Context, out *Transfers, cfg config.Chain, client Chain, token evm.Address, meta Meta, limit int) error {
 	out.Source = SourceHyperSync
-	ttl := func(_ ethWindow, err error) time.Duration {
+	ttl := func(w ethWindow, err error) time.Duration {
 		if err != nil {
 			return 0
+		}
+		if len(w.Transfers) == 0 && w.Cut {
+			// a short window of a busy token that shows nothing is more likely a bad read than an idle token
+			return time.Minute
 		}
 		return s.d.Config.TransfersCache
 	}
 	key := cfg.ID + "/" + token.String()
 	fetch := func(ctx context.Context) (ethWindow, error) { return s.fetchWindow(ctx, cfg, token) }
+	older := func() (goodWindow, bool) {
+		g, _, ok := s.lastGood.Peek(key)
+		return g, ok && s.now().Sub(g.w.ReadAt) <= olderKeep+s.d.Config.TransfersCache
+	}
+	serve := func(g goodWindow, notes ...Note) error {
+		out.Window = &g.window
+		out.Items = items(g.w.Transfers, meta.Decimals, limit)
+		if g.w.Cut {
+			notes = append([]Note{CovWindowCut}, notes...)
+		}
+		out.Coverage = codes(notes...)
+		return nil
+	}
 	if _, _, ok := s.windows.Peek(key); !ok {
-		// the quota is spent until the pause ends: start the read for the next caller and tell this one when to come back
+		// the quota is spent until the pause ends: start the read for the next caller, then answer with the last good
+		// window, or tell this caller when to come back
 		if pause := s.d.Logs.PausedFor(); pause > 0 {
 			if dl, ok := ctx.Deadline(); ok && time.Until(dl) < pause+pauseMargin {
 				go func() { _, _ = s.windows.Get(context.WithoutCancel(ctx), key, ttl, fetch) }()
+				if g, ok := older(); ok {
+					return serve(g, CovWindowOlder)
+				}
 				return &sources.UnavailableError{Source: SourceHyperSync, RetryAfter: pause + pauseMargin, Err: errors.New("the HyperSync quota is spent until the next window")}
 			}
 		}
 	}
 	w, err := s.windows.Get(ctx, key, ttl, fetch)
 	if err != nil {
+		if g, ok := older(); ok {
+			return serve(g, CovWindowOlder)
+		}
 		return err
 	}
-	if out.Window, err = s.window(ctx, cfg.ID, client, w.From, w.To); err != nil {
-		return err
+	g := goodWindow{w: w}
+	if prev, _, ok := s.lastGood.Peek(key); ok && prev.w.ReadAt.Equal(w.ReadAt) {
+		g.window = prev.window
+	} else {
+		win, err := s.window(ctx, cfg.ID, client, w.From, w.To)
+		if err != nil {
+			return err
+		}
+		g.window = *win
+		s.lastGood.Set(key, g, olderKeep+s.d.Config.TransfersCache)
 	}
-	out.Items = items(w.Transfers, meta.Decimals, limit)
-	var notes []Note
-	if w.Cut {
-		notes = append(notes, CovWindowCut)
-	}
-	out.Coverage = codes(notes...)
-	return nil
+	return serve(g)
 }
 
 // fetchWindow reads [head-W+1, head] in at most TransferPageBudget pages, and shortens W for a token too busy for that
@@ -150,7 +186,13 @@ func (s *Service) fetchWindow(ctx context.Context, cfg config.Chain, token evm.A
 				end = next
 				cut = true
 			}
-			return ethWindow{From: from, To: end - 1, Transfers: largest(logs, token), Cut: cut}, nil
+			for _, l := range logs {
+				if l.Time == 0 {
+					// a log without its block time means the answer was incomplete: an empty window would look like data
+					return ethWindow{}, &sources.UnavailableError{Source: SourceHyperSync, RetryAfter: 5 * time.Second, Err: errors.New("hypersync answered logs without block times")}
+				}
+			}
+			return ethWindow{From: from, To: end - 1, Transfers: largest(logs, token), Cut: cut, ReadAt: s.now()}, nil
 		}
 		// too busy: shrink the window to what the pages left can read, judged by the blocks one page covered
 		perPage := max((next-from)/uint64(max(pages, 1)), 1)

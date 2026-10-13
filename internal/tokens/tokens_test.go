@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"slices"
 	"testing"
+	"time"
 
 	"tokens/internal/fixture"
 	"tokens/internal/sources"
@@ -201,6 +202,41 @@ func TestTransfersEthereumWindow(t *testing.T) {
 	var ue *sources.UnavailableError
 	if _, err := svc.Transfers(t.Context(), fixture.Ethereum, fixture.EthUSDC, 5); !errors.As(err, &ue) {
 		t.Errorf("HyperSync down: %v", err)
+	}
+}
+
+func TestTransfersServeOlderWindowWhenHyperSyncFails(t *testing.T) {
+	svc, f := fixture.ShortTransferCache(t)
+	fresh, err := svc.Transfers(t.Context(), fixture.Ethereum, fixture.EthMKR, 5)
+	if err != nil || len(fresh.Items) != 5 || slices.Contains(fresh.Coverage, "token_transfer_window_older") {
+		t.Fatalf("fresh %+v %v", fresh, err)
+	}
+	time.Sleep(40 * time.Millisecond)
+	f.HyperDown = true
+	old, err := svc.Transfers(t.Context(), fixture.Ethereum, fixture.EthMKR, 5)
+	if err != nil {
+		t.Fatalf("an older window exists, got %v", err)
+	}
+	if len(old.Items) != 5 || !slices.Contains(old.Coverage, "token_transfer_window_older") || *old.Window != *fresh.Window || old.Items[0] != fresh.Items[0] {
+		t.Errorf("older %+v, fresh %+v", old, fresh)
+	}
+	var ue *sources.UnavailableError
+	if _, err := svc.Transfers(t.Context(), fixture.Ethereum, fixture.EthUSDC, 5); !errors.As(err, &ue) {
+		t.Errorf("no copy of USDC: %v", err)
+	}
+}
+
+func TestTransfersIncompleteAnswerIsNotData(t *testing.T) {
+	svc, f := fixture.Service(t)
+	f.HyperNoTimes = true
+	var ue *sources.UnavailableError
+	if _, err := svc.Transfers(t.Context(), fixture.Ethereum, fixture.EthMKR, 5); !errors.As(err, &ue) {
+		t.Fatalf("logs without block times: %v", err)
+	}
+	f.HyperNoTimes = false
+	tr, err := svc.Transfers(t.Context(), fixture.Ethereum, fixture.EthMKR, 5)
+	if err != nil || len(tr.Items) != 5 {
+		t.Errorf("the failure was cached: %+v %v", tr, err)
 	}
 }
 

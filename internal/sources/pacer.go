@@ -6,13 +6,18 @@ import (
 	"time"
 )
 
-// Priority orders the waiters of a pacer: a visitor's request goes before background work
+// Priority orders the waiters of a pacer: a visitor's request goes first, background work next, and a job's request only
+// when it would leave a slot for a visitor
 type Priority int
 
 const (
 	Background Priority = iota
 	Interactive
+	// Job is a long task that shares the visitors' pacer, such as a holder map: it yields to every visitor
+	Job
 )
+
+const priorities = 3
 
 // Pacer hands out request slots at a steady rate with a small burst, interactive waiters first, and stops for a pause a source asked for
 type Pacer struct {
@@ -24,8 +29,13 @@ type Pacer struct {
 	tokens  float64
 	last    time.Time
 	paused  time.Time
-	waiting [2][]chan struct{}
+	waiting [priorities][]chan struct{}
 	timer   *time.Timer
+
+	// a Job request is granted only when reserve whole slots stay free after it and jobGap has passed since the last one
+	reserve int
+	jobGap  time.Duration
+	lastJob time.Time
 }
 
 // NewPacer allows perMinute requests a minute on average and up to burst at once
@@ -33,6 +43,15 @@ func NewPacer(perMinute float64, burst int) *Pacer {
 	p := &Pacer{gap: time.Duration(float64(time.Minute) / perMinute), burst: max(burst, 1), now: time.Now}
 	p.tokens = float64(p.burst)
 	p.last = p.now()
+	return p
+}
+
+// WithJobLane limits the Job priority: a grant needs reserve more slots in the bucket than it takes, so a visitor that
+// arrives right after still finds one, and two grants are at least gap apart. A reserve the burst cannot hold is cut to it.
+func (p *Pacer) WithJobLane(reserve int, gap time.Duration) *Pacer {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.reserve, p.jobGap = min(max(reserve, 0), p.burst-1), gap
 	return p
 }
 
@@ -101,19 +120,32 @@ func (p *Pacer) refill(now time.Time) {
 func (p *Pacer) dispatchLocked() {
 	now := p.now()
 	p.refill(now)
-	for len(p.waiting[Interactive])+len(p.waiting[Background]) > 0 {
+	for len(p.waiting[Interactive])+len(p.waiting[Background])+len(p.waiting[Job]) > 0 {
 		if wait := p.paused.Sub(now); wait > 0 {
 			p.arm(wait)
 			return
+		}
+		prio := Interactive
+		switch {
+		case len(p.waiting[Interactive]) > 0:
+		case len(p.waiting[Background]) > 0:
+			prio = Background
+		default:
+			prio = Job
+			// a Job takes one slot and leaves the reserve, and keeps its distance from the last Job
+			need := float64(1 + p.reserve)
+			if wait := max(time.Duration((need-p.tokens)*float64(p.gap)), p.lastJob.Add(p.jobGap).Sub(now)); wait > 0 {
+				p.arm(wait)
+				return
+			}
 		}
 		if p.tokens < 1 {
 			p.arm(time.Duration((1 - p.tokens) * float64(p.gap)))
 			return
 		}
 		p.tokens--
-		prio := Background
-		if len(p.waiting[Interactive]) > 0 {
-			prio = Interactive
+		if prio == Job {
+			p.lastJob = now
 		}
 		close(p.waiting[prio][0])
 		p.waiting[prio] = p.waiting[prio][1:]

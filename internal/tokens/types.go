@@ -201,6 +201,7 @@ var (
 	CovFromActivity       = Note{"token_holders_from_activity", "The token's full history is too long to index on the free HyperSync quota, so the index follows the addresses active since index.start_block and reads their balances with balanceOf. A holder that has not moved the token since then is missing."}
 	CovFromTransfers      = Note{"token_balances_from_transfers", "Balances are the sum of the token's Transfer events (and Deposit and Withdrawal for wrapped MON). A token that changes balances without events, such as a rebasing token, drifts from balanceOf."}
 	CovWindowCut          = Note{"token_transfer_window_cut", "The token is busy, so the window is shorter than the default to stay within the HyperSync quota. window gives its blocks and times."}
+	CovWindowOlder        = Note{"token_transfer_window_older", "HyperSync did not answer, so the transfers are the last window that was read, up to 6 hours and 15 minutes ago. window.to_time is the time it ends; it is not the latest day."}
 	CovGeckoHolders       = Note{"token_holder_count_provider", "holder_count and top10_share come from GeckoTerminal, which updates them on its own schedule."}
 	CovSearchListDown     = Note{"token_search_list_unavailable", "A curated token list has not loaded yet, so verified tokens from it may be missing from the search."}
 	CovSearchLongTailDown = Note{"token_search_long_tail_unavailable", "GeckoTerminal did not answer in time for a chain, so tokens that are on no curated list may be missing from the search."}
@@ -216,7 +217,7 @@ var (
 
 // AllNotes is every coverage code the engine can state, in the order the status lists them
 var AllNotes = []Note{
-	CovNoPrice, CovSourceDown, CovMultichainCap, CovIndexPartial, CovIndexFull, CovFromActivity, CovFromTransfers, CovWindowCut, CovGeckoHolders, CovHoldersPartial,
+	CovNoPrice, CovSourceDown, CovMultichainCap, CovIndexPartial, CovIndexFull, CovFromActivity, CovFromTransfers, CovWindowCut, CovWindowOlder, CovGeckoHolders, CovHoldersPartial,
 	CovSearchListDown, CovSearchLongTailDown, CovSearchUnverified,
 	CovMapIndexIncomplete, CovMapLinksEthereumOnly, CovMapWindowCut, CovMapQueueFull, CovMapLinksFailed,
 }
