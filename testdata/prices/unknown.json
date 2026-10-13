@@ -1,0 +1,1 @@
+{"type":"urn:sona:problem:price_not_found","title":"No price for this coin","status":404,"detail":"No price is known for this coin.","instance":"/internal/v1/chains/eip155:1/tokens/0x000000000000000000000000000000000000dead/prices","code":"price_not_found"}
