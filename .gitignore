@@ -1,0 +1,20 @@
+# Secrets: never commit real keys. Copy .env.example to .env instead.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Go build and test output
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+go.work
+go.work.sum
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/

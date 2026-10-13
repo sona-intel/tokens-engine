@@ -1,0 +1,50 @@
+chains:
+  - id: "eip155:1"
+    name: ethereum
+    rpc_url: http://rpc-router:4000/sona/ethereum
+    hypersync_url: https://eth.hypersync.xyz/query
+    holders: blockscout
+    wrapped_native: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+  - id: "eip155:143"
+    name: monad
+    rpc_url: http://rpc-router:4000/sona/monad
+    hypersync_url: https://monad.hypersync.xyz/query
+    holders: index
+    # WMON, a WETH9 copy whose Deposit and Withdrawal events mint and burn
+    wrapped_native: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a"
+# X-ERPC-Use-Upstream on every JSON-RPC request, so the router never uses its paid dRPC upstreams
+rpc_upstream_filter: "!drpc-*"
+blockscout_url: https://eth.blockscout.com
+blockscout_per_second: 3
+geckoterminal_url: https://api.geckoterminal.com/api/v2
+geckoterminal_network: monad
+# GeckoTerminal allows about 30 a minute for everyone on this address, so the engine keeps to 20
+geckoterminal_per_minute: 20
+prices_url: http://prices:8080
+# the HyperSync key allows 15 requests a minute for everyone and x402-indexer uses most of them:
+# the index (backfill and tail) keeps to 3, visitors' Ethereum transfer windows to 2
+hypersync_per_minute: 3
+hypersync_interactive_per_minute: 2
+meta_cache: 2m
+holders_cache: 10m
+geckoterminal_cache: 15m
+transfers_cache: 15m
+price_cache: 1m
+# Ethereum's large transfers come from the last blocks: 7,200 blocks is about a day, cut down for busy tokens
+transfer_window_blocks: 7200
+transfer_min_blocks: 20
+transfer_page_budget: 3
+index:
+  max_tokens: 50
+  # a backfill that would need more HyperSync requests than this follows the token's recent activity instead
+  backfill_budget: 120
+  # about 2 hours of Monad blocks
+  activity_window_blocks: 20000
+  tail_interval: 60s
+  lag_blocks: 10
+  window_days: 7
+  top_per_day: 100
+  retry_failed_after: 10m
+  prewarm:
+    - "0x754704bc059f8c67012fed69bc8a327a5aafb603" # USDC
+    - "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" # WMON
