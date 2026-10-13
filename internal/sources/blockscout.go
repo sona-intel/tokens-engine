@@ -44,6 +44,8 @@ type BlockscoutToken struct {
 	CirculatingMarketCap *float64
 	TotalSupply          *big.Int
 	Type                 string
+	// IconURL is the token's logo when Blockscout has one, as an https URL
+	IconURL *string
 }
 
 type bsToken struct {
@@ -51,6 +53,7 @@ type bsToken struct {
 	CirculatingMarketCap *string `json:"circulating_market_cap"`
 	TotalSupply          *string `json:"total_supply"`
 	Type                 string  `json:"type"`
+	IconURL              *string `json:"icon_url"`
 }
 
 // Token reads /api/v2/tokens/{token}
@@ -67,6 +70,11 @@ func (b *Blockscout) Token(ctx context.Context, token evm.Address) (BlockscoutTo
 
 func (raw bsToken) convert() (BlockscoutToken, error) {
 	out := BlockscoutToken{Type: raw.Type}
+	if raw.IconURL != nil {
+		if u := HTTPSURL(*raw.IconURL); u != "" {
+			out.IconURL = &u
+		}
+	}
 	if raw.HoldersCount != nil {
 		n, err := strconv.ParseInt(*raw.HoldersCount, 10, 64)
 		if err != nil || n < 0 {

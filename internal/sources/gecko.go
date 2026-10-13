@@ -37,12 +37,15 @@ type GeckoHolders struct {
 	Count       *int64
 	Top10Share  *float64
 	LastUpdated *time.Time
+	// ImageURL is the token's logo when GeckoTerminal has one, as an https URL
+	ImageURL *string
 }
 
 type geckoInfo struct {
 	Data struct {
 		Attributes struct {
-			Holders *struct {
+			ImageURL *string `json:"image_url"`
+			Holders  *struct {
 				Count        *int64 `json:"count"`
 				Distribution *struct {
 					Top10 *string `json:"top_10"`
@@ -66,11 +69,16 @@ func (g *Gecko) Holders(ctx context.Context, token evm.Address) (GeckoHolders, e
 }
 
 func (raw geckoInfo) convert() (GeckoHolders, error) {
+	var out GeckoHolders
+	if raw.Data.Attributes.ImageURL != nil {
+		if u := HTTPSURL(*raw.Data.Attributes.ImageURL); u != "" {
+			out.ImageURL = &u
+		}
+	}
 	h := raw.Data.Attributes.Holders
 	if h == nil {
-		return GeckoHolders{}, nil
+		return out, nil
 	}
-	var out GeckoHolders
 	if h.Count != nil {
 		if *h.Count < 0 {
 			return GeckoHolders{}, errors.New("geckoterminal: holder count is negative")
@@ -128,11 +136,13 @@ func (raw geckoToken) convert() (*float64, error) {
 	return &f, nil
 }
 
-func (g *Gecko) wait(ctx context.Context) error {
+func (g *Gecko) wait(ctx context.Context) error { return g.waitFor(ctx, Interactive) }
+
+func (g *Gecko) waitFor(ctx context.Context, prio Priority) error {
 	if d := g.pacer.PausedFor(); d > 0 {
 		return &UnavailableError{Source: geckoName, RetryAfter: d, Err: errors.New("paused after a 429")}
 	}
-	return g.pacer.Wait(ctx, Interactive)
+	return g.pacer.Wait(ctx, prio)
 }
 
 func (g *Gecko) get(ctx context.Context, path string, out any) error {
