@@ -189,5 +189,50 @@ def record_hypersync():
               "logs": [{"address": [ETH_MKR], "topics": [[TRANSFER]]}], "field_selection": fields, "max_num_logs": 50000})
 
 
+ETH_UNI = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
+# about 30 days of 12-second Ethereum slots
+MAP_WINDOW_BLOCKS = 216000
+MAP_PAGES = 8
+
+
+def record_holdermap():
+    """UNI's contract read, its first two Blockscout holder pages (100 holders), and the HyperSync pages of the
+    holder map query: UNI Transfer logs whose sender and receiver are both among those 100, over the last
+    216,000 blocks before the archive height, in at most 8 pages"""
+    meta("ethereum", ETH_UNI, "eth_uni")
+    base = "https://eth.blockscout.com/api/v2/tokens/" + ETH_UNI + "/holders"
+    status, raw, _ = fetch(base, headers={"Accept": "application/json"})
+    assert status == 200, status
+    save("blockscout/holders.uni.page1.json", raw)
+    page1 = json.loads(raw)
+    q = "&".join(f"{k}={v}" for k, v in page1["next_page_params"].items())
+    time.sleep(0.5)
+    status, raw2, _ = fetch(base + "?" + q, headers={"Accept": "application/json"})
+    assert status == 200, status
+    save("blockscout/holders.uni.page2.json", raw2)
+    holders = [it["address"]["hash"].lower() for it in page1["items"] + json.loads(raw2)["items"]]
+    topics = ["0x" + "0" * 24 + h[2:] for h in holders]
+
+    key = os.environ["ENVIO_HYPERSYNC_KEY"]
+    status, raw, _ = fetch("https://eth.hypersync.xyz/height", headers={"Authorization": "Bearer " + key})
+    assert status == 200, status
+    head = json.loads(raw)["height"]
+    start, end = head + 1 - MAP_WINDOW_BLOCKS, head + 1
+    print(" head", head, "from", start)
+    nxt = start
+    for n in range(1, MAP_PAGES + 1):
+        hypersync("eth.hypersync.xyz", f"eth_uni_map.p{n}", {"from_block": nxt, "to_block": end,
+                  "logs": [{"address": [ETH_UNI], "topics": [[TRANSFER], topics, topics]}],
+                  "field_selection": {"log": LOG_FIELDS}, "max_num_logs": 50000})
+        with open(os.path.join(OUT, f"hypersync/eth_uni_map.p{n}.json")) as f:
+            nxt = json.load(f)["next_block"]
+        print(" next_block", nxt)
+        if nxt >= end:
+            break
+    for b in (start, min(nxt, end) - 1):
+        save(f"rpc/header.ethereum_{b}.json", rpc("ethereum", "eth_getBlockByNumber", [hex(b), False]))
+
+
 if __name__ == "__main__":
-    {"rpc": record_rpc, "blockscout": record_blockscout, "gecko": record_gecko, "prices": record_prices, "hypersync": record_hypersync, "lists": record_lists, "search": record_search}[sys.argv[1]]()
+    {"rpc": record_rpc, "blockscout": record_blockscout, "gecko": record_gecko, "prices": record_prices, "hypersync": record_hypersync, "lists": record_lists, "search": record_search,
+     "holdermap": record_holdermap}[sys.argv[1]]()
