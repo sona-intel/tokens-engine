@@ -63,6 +63,55 @@ A token matches when its symbol starts with the query, else its name starts with
 
 Tokens that are on no list come from two places. GeckoTerminal's pool search (`/search/pools?query=&network=&include=base_token,quote_token`, one request per chain, kept 5 minutes) gives the base and quote token of each pool found; a token's liquidity is the sum of `reserve_in_usd` of the pools found that hold it, which can be a copycat's own doing, so it ranks only among unverified tokens. The Monad index adds the tokens it holds, read from their contracts. The search waits at most 3 seconds for GeckoTerminal, behind token pages in the pacer, and without it answers with the curated tokens and `token_search_long_tail_unavailable`.
 
+## Markets and chain figures
+
+These routes answer from memory. A loop per source reads it in the background, replaces the held copy only when a read succeeds (a failed read leaves the last good copy and is retried after a tenth of the interval, between 1 and 10 minutes, or after the source's `Retry-After` when that is longer), and a call never waits for a source. Before the first read of a source succeeds its routes answer 503 `upstream_unavailable`. A copy that missed 3 intervals is **stale** and the answer says so in `coverage`. On 2026-10-13 all sources together held about 7 MB of heap and the whole process peaked at 32 MB resident (measured with `GOMEMLIMIT=160MiB`, the container's setting), so the 192 MB container limit stays.
+
+### Top coins
+
+`GET /internal/v1/markets/top-coins` serves CoinGecko's `/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h`, read every 5 minutes.
+
+- `rank` is `market_cap_rank`, `price_usd` is `current_price`, `market_cap_usd` is `market_cap`, `change_24h_pct` is `price_change_percentage_24h` rounded to 2 decimals (null when CoinGecko has none). A coin without a price or a market cap is left out. `symbol` is upper case, `logo_url` is CoinGecko's `image` when it is an https URL, else null.
+- `as_of` is the newest `last_updated` of the list, or the time of the read when none parses. Prices are the ones CoinGecko had at that time, up to 5 minutes older than the call, more when stale.
+- `tokens` come from `/coins/list?include_platform=true`, read once a day (3,976,033 bytes and 22,229 coins on 2026-10-13, decoded one coin at a time, only the platform keys `ethereum` and `monad` kept). The Monad key is `monad` (195 coins held it, Ethereum's `ethereum` 6,057). An address is kept when it is `0x` and 40 hex digits (CoinGecko sends an empty string for some coins), lowercased, Ethereum first. A coin with no contract on either chain (Bitcoin, Ethereum's own coin) has an empty list. The map is CoinGecko's: a wrapped or bridged token is whatever CoinGecko says it is, and two coins can list the same address.
+- CoinGecko's keyless tier is shared and strict: the engine sends at most one CoinGecko request every 20 seconds (both reads share the pace), pauses for the `Retry-After` of a 429 (at least 1 minute), and when `COINGECKO_API_KEY` is set sends it as `x-cg-demo-api-key`. The key is never logged.
+
+### DeFi figures
+
+All come from DefiLlama's keyless APIs (`api.llama.fi`, `stablecoins.llama.fi`), at most 30 requests a minute, every hour. DefiLlama calls Ethereum `Ethereum` and Monad `Monad`; other chains answer 404 `unsupported_chain`. A day is a UTC day, and **the last item of every series is the current day, still in progress** (`chain_series_last_day_partial`).
+
+- **TVL** (`/defi/tvl`): `/v2/historicalChainTvl/{Name}`, which answers for Monad. `current_usd` is its last point. The point is the same figure as `/v2/chains`: on 2026-10-13 Monad's last point was 1,031,397,405 against 1,031,397,356 there, and Ethereum's 51,215,175,507 against 51,307,498,418 (read minutes apart; the two endpoints refresh on their own schedules, so they differ by the movement in between). `change_1d_pct` and `change_7d_pct` compare the last point with the point exactly 1 and 7 days before its day, null when that day is missing; because the last point is the day so far, they measure the move since that earlier day's snapshot. Monad's first points (October to November 2025) are weeks apart, so `days=all` has gaps there. `days` keeps the points of the last N days.
+- **Protocols** (`/defi/protocols`): `/protocols` (9,249,298 bytes and 8,714 protocols on 2026-10-13), decoded one protocol at a time, keeping the rows whose `chainTvls` holds the chain's name (147 for Monad, 1,762 for Ethereum). `tvl_usd` is `chainTvls[Name]`: the protocol's own TVL on this chain, without the separate `-borrowed`, `-staking`, `-pool2` and `-vesting` keys. The categories `CEX` (exchange custody) and `Chain` (a chain's own entry) are left out, because DefiLlama leaves them out of a chain's TVL, as are rows with no positive TVL. Even then the rows **do not add up to the chain's TVL** (`chain_protocols_not_additive`): on 2026-10-13 Ethereum's rows summed to 158.8 billion dollars against the chain's 51.3 billion (278.4 billion with CEX and Chain), and Monad's to 1.90 billion against 1.03 billion, because DefiLlama's chain figure also removes TVL that two protocols count at once (liquid staking, risk curators, allocators), and the protocol list does not say which. `change_1d_pct` and `change_7d_pct` are `change_1d` and `change_7d` of the protocol on **all its chains** (`chain_protocol_change_all_chains`), because the list holds no per-chain change. `categories` totals every kept row of the chain; `items` holds the 100 largest at most, and `limit` cuts that.
+- **Stablecoins** (`/defi/stablecoins`): `items` are the 15 largest USD-pegged stablecoins from `/stablecoins?includePrices=true`, `chainCirculating[Name].current.peggedUSD`, positive only; stablecoins pegged to another currency are not listed (they have no `peggedUSD` figure). `history` is `/stablecoincharts/{Name}`, `totalCirculatingUSD.peggedUSD` of each day, the last 365. `total_usd` is the last history point, DefiLlama's chart total, which counts more than the listed coins: Monad's was 814,646,451 against 773,180,809 for the sum of its USD-pegged coins on 2026-10-13, and the gap was not explained by DefiLlama.
+- **DEX volume** (`/defi/dexs`): `/overview/dexs/{Name}?excludeTotalDataChart=false&excludeTotalDataChartBreakdown=true`. `total_24h_usd`, `total_7d_usd`, `total_30d_usd` and `change_1d_pct` are DefiLlama's headline fields as sent. They are not sums of `items`: on 2026-10-13 Monad's `total24h` (33,337,989) was the chart's second-last day, while the sum of the protocol rows' `total24h` (36,632,955) matched the chart's last day, the day in progress. `items` are the chart's daily volumes. `protocols` are the 15 DEXes with the most `total24h` above zero, named by `displayName`, with `total24h` and `total7d`; a DEX that trades on many chains shows its volume on this chain.
+
+### Activity
+
+`GET /internal/v1/chains/eip155:1/activity` reads Blockscout's stats service (`eth.blockscout.com/stats-service/api/v1/lines/{id}`, `from` 364 days before today to today), six requests an hour through the same Blockscout pacer as the token routes (3 a second, at the background priority). Monad answers 404 `unsupported_chain` because no source is wired for it.
+
+| Metric | Line id | Unit as sent | Output |
+|---|---|---|---|
+| `txs` | `newTxns` | transactions a day | as sent |
+| `active_accounts` | `activeAccounts` | accounts that sent or received that day | as sent |
+| `new_accounts` | `newAccounts` | accounts seen for the first time | as sent |
+| `gas_price_gwei` | `averageGasPrice` | gwei (the line's `units`) | as sent |
+| `fees_eth` | `txnsFee` | ETH (the line's `units`) | as sent |
+| `utilization_pct` | `networkUtilization` | a fraction, 0.5 for a half full block | times 100, so 50.4 |
+
+The utilization line has no unit in the service's description; it was read as a fraction because its days sit at 0.504 and Blockscout's own `/api/v2/stats` and blocks give 52.8% and 54% to 81% on the same day. `days` keeps the last N days.
+
+### Coverage codes of these records
+
+| Code | Meaning |
+|---|---|
+| `market_top_coins_stale` | the CoinGecko list is over 15 minutes old because its refresh keeps failing |
+| `market_token_map_unavailable` | the address map has not loaded, or is over 3 days old, so `tokens` can be empty or out of date |
+| `chain_defi_stale` | the DefiLlama copy is over 3 hours old |
+| `chain_activity_stale` | the Blockscout stats copy is over 3 hours old |
+| `chain_series_last_day_partial` | the last item is the current UTC day |
+| `chain_protocols_not_additive` | protocol rows do not sum to the chain's TVL |
+| `chain_protocol_change_all_chains` | protocol changes are those on all chains |
+
 ## Limits
 
 - No number is a forecast, and nothing here labels addresses beyond Blockscout's own name tags on Ethereum.

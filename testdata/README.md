@@ -13,3 +13,14 @@ Every file here is a real answer, saved as the source sent it, on 2026-10-13 by 
 | `prices/` | Sona's prices service on `127.0.0.1:8210` | `monad_usdc.json` (the 1-day chart of Monad USDC) and `unknown.json` (the 404 for `0x…dead` on Ethereum) |
 
 The values in the tests (holder counts, top 10 shares, block times) are read from these files, so a new recording needs the expectations updated with it.
+
+## Markets
+
+Recorded on 2026-10-13 by `python3 -I testdata/tools/record_markets.py [llama|stats|coingecko]`. Each file is a real answer, trimmed only by dropping rows or fields the tests never read; nothing is edited or made up.
+
+| Folder | Source | Trim |
+|---|---|---|
+| `coingecko/` | `api.coingecko.com/api/v3` | `markets.json`: the first 20 of the 100 rows of `/coins/markets`. `coins_list.json`: the `/coins/list?include_platform=true` entries of those 20 coins plus `wrapped-monad` and `cuberium` (an empty Ethereum address) |
+| `llama/` | `api.llama.fi`, `stablecoins.llama.fi` | `tvl.{monad,ethereum}.json`: the last 400 points of `/v2/historicalChainTvl/{Name}`. `stablecharts.*.json`: the last 400 days of `/stablecoincharts/{Name}`, reduced to `date` and `totalCirculatingUSD.peggedUSD`. `dex.*.json`: `/overview/dexs/{Name}` without `allChains`, the last 400 chart days and the 20 protocols with the most volume, without their `methodology`. `chains.json`: the two rows of `/v2/chains`. `protocols.json`: the 12 largest Monad and Ethereum rows of `/protocols` and two CEX/Chain rows of each, without description, dimensions, methodology and the other long text fields. `stablecoins.json`: the largest stablecoins on Monad and Ethereum from `/stablecoins?includePrices=true`, with `chainCirculating` reduced to those two chains |
+| `blockscout/stats.*.json` | `eth.blockscout.com/stats-service/api/v1/lines/{id}`, the six ids of the activity route | 121 days, 2026-06-15 to 2026-10-13 |
+

@@ -83,6 +83,7 @@ type Config struct {
 	TransferMinBlocks    uint64
 	TransferPageBudget   int
 	Index                Index
+	Markets              Markets
 }
 
 // Chain returns the chain with this CAIP-2 id
@@ -176,6 +177,7 @@ type file struct {
 	TransferMinBlocks    uint64          `yaml:"transfer_min_blocks"`
 	TransferPageBudget   int             `yaml:"transfer_page_budget"`
 	Index                indexFile       `yaml:"index"`
+	Markets              marketsFile     `yaml:"markets"`
 }
 
 var (
@@ -221,6 +223,7 @@ func Load(dir string) (Config, error) {
 		return Config{}, fmt.Errorf("engine config %s: %w", path, err)
 	}
 	cfg.HyperSyncKey = Secret(strings.TrimSpace(os.Getenv("ENVIO_HYPERSYNC_KEY")))
+	cfg.Markets.CoinGeckoKey = Secret(strings.TrimSpace(os.Getenv("COINGECKO_API_KEY")))
 	return cfg, nil
 }
 
@@ -259,6 +262,7 @@ func (f file) build() (Config, error) {
 			TopPerDay:            f.Index.TopPerDay,
 			RetryFailedAfter:     f.Index.RetryFailedAfter,
 		},
+		Markets: f.Markets.build(),
 	}
 	for _, c := range f.Chains {
 		ch := Chain{ID: c.ID, Name: c.Name, RPCURL: c.RPCURL, HyperSyncURL: c.HyperSyncURL, Holders: c.Holders, GeckoNetwork: c.GeckoNetwork}
@@ -310,6 +314,9 @@ func (f file) validate() error {
 		return fmt.Errorf("transfer_page_budget must be 1 to 10, got %d", f.TransferPageBudget)
 	}
 	if err := f.validateLists(); err != nil {
+		return err
+	}
+	if err := f.Markets.validate(f.Chains); err != nil {
 		return err
 	}
 	return f.Index.validate()

@@ -13,6 +13,7 @@ import (
 
 	"tokens/internal/config"
 	"tokens/internal/index"
+	"tokens/internal/markets"
 	"tokens/internal/rpc"
 	"tokens/internal/server"
 	"tokens/internal/sources"
@@ -20,11 +21,15 @@ import (
 	"tokens/internal/tokens"
 )
 
+// marketService is named apart so the embedded markets service does not clash with the tokens service
+type marketService = markets.Service
+
 const readyTTL = 2 * time.Second
 
 // App is the server's view of the engine
 type App struct {
 	*tokens.Service
+	*marketService
 	cfg     config.Config
 	status  tokens.StatusDeps
 	st      *store.Store
@@ -36,7 +41,10 @@ type App struct {
 	ready   bool
 }
 
-var _ server.Service = (*App)(nil)
+var (
+	_ server.Service = (*App)(nil)
+	_ server.Markets = (*App)(nil)
+)
 
 type Deps struct {
 	Config  config.Config
@@ -70,17 +78,25 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 	if a.Indexer != nil {
 		idx = a.Indexer
 	}
+	blockscout := sources.NewBlockscout(cfg.BlockscoutURL, cfg.BlockscoutPerSecond)
 	a.lists = tokens.NewLists(cfg, sources.NewTokenLists(cfg.TokenListTimeout))
 	a.Service = tokens.New(tokens.Deps{
 		Config:     cfg,
 		Chains:     chains,
-		Blockscout: sources.NewBlockscout(cfg.BlockscoutURL, cfg.BlockscoutPerSecond),
+		Blockscout: blockscout,
 		Gecko:      sources.NewGecko(cfg.GeckoURL, cfg.GeckoNetwork, cfg.GeckoPerMinute),
 		Prices:     sources.NewPrices(cfg.PricesURL),
 		Logs:       hs,
 		Index:      idx,
 		Store:      d.Store,
 		Lists:      a.lists,
+	})
+	a.marketService = markets.New(markets.Deps{
+		Config:     cfg.Markets,
+		CoinGecko:  sources.NewCoinGecko(cfg.Markets.CoinGeckoURL, cfg.Markets.CoinGeckoKey.Reveal(), cfg.Markets.CoinGeckoGap),
+		Llama:      sources.NewLlama(cfg.Markets.LlamaURL, cfg.Markets.StablecoinsURL, cfg.Markets.LlamaPerMinute),
+		Blockscout: blockscout,
+		Logger:     d.Logger,
 	})
 	paid := func() int64 {
 		var n int64
@@ -138,6 +154,7 @@ func (a *App) Ready(ctx context.Context) bool {
 // Run runs the index and the token list refresh until ctx ends
 func (a *App) Run(ctx context.Context) {
 	go a.lists.Run(ctx)
+	go a.marketService.Run(ctx)
 	if a.Indexer == nil {
 		<-ctx.Done()
 		return

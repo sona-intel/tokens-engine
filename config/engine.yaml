@@ -63,3 +63,23 @@ index:
   prewarm:
     - "0x754704bc059f8c67012fed69bc8a327a5aafb603" # USDC
     - "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" # WMON
+# Chain and market routes: top coins from CoinGecko, DeFi figures from DefiLlama, activity from Blockscout's stats service.
+# Everything is read in the background and held in memory; the optional COINGECKO_API_KEY (a demo key) goes in the x-cg-demo-api-key header.
+markets:
+  coingecko_url: https://api.coingecko.com/api/v3
+  # CoinGecko's keyless tier is shared and strict, so the engine sends at most one request every 20 seconds
+  coingecko_min_gap: 20s
+  top_coins_refresh: 5m
+  # the coin list with contract addresses is 4 MB
+  platforms_refresh: 24h
+  llama_url: https://api.llama.fi
+  stablecoins_url: https://stablecoins.llama.fi
+  llama_per_minute: 30
+  defi_refresh: 1h
+  activity_refresh: 1h
+  chains:
+    - id: "eip155:1"
+      llama_name: Ethereum
+      activity: true
+    - id: "eip155:143"
+      llama_name: Monad

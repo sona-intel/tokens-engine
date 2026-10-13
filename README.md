@@ -8,6 +8,12 @@ Sona's token data for token pages on Ethereum (`eip155:1`) and Monad (`eip155:14
 - what moved: the largest transfers of a recent window;
 - how to find it: a search by symbol or name, with the tokens on curated lists first, and a logo for each token.
 
+Beside the token records it serves figures for the market and for each chain, read in the background and held in memory:
+
+- the largest coins by market cap, with their contracts on Ethereum and Monad (`GET /internal/v1/markets/top-coins`);
+- a chain's DeFi figures: TVL by day, protocols by TVL, stablecoin supply and DEX volume (`GET /internal/v1/chains/{chain}/defi/{tvl,protocols,stablecoins,dexs}`);
+- Ethereum's daily activity: transactions, accounts, gas price, fees and utilization (`GET /internal/v1/chains/eip155:1/activity`).
+
 [`RULES.md`](RULES.md) says how every number is made and where it falls short.
 
 ## Read-only and keyless
@@ -24,6 +30,9 @@ The engine only reads. It holds no wallet or private key and signs nothing. Its 
 | GeckoTerminal (`api.geckoterminal.com`, keyless, at most 20 requests a minute) | Monad: holder count, top 10 share, market cap, logo. Both chains: the pool search behind the token search |
 | Curated token lists (Uniswap default list at `tokens.uniswap.org`, the Monad Foundation's `monad-crypto/token-list` on GitHub, keyless, read on start and daily) | verified tokens of the search and the first choice of `logo_url` |
 | Envio HyperSync (`ENVIO_HYPERSYNC_KEY`) | Ethereum: the transfer window of a token. Monad: the backfill and the tail of the holder index |
+| CoinGecko (`api.coingecko.com`, keyless, at most 1 request every 20 seconds; the optional demo key `COINGECKO_API_KEY` goes in `x-cg-demo-api-key`) | the top coins and the coin list with contract addresses |
+| DefiLlama (`api.llama.fi`, `stablecoins.llama.fi`, keyless, at most 30 requests a minute) | TVL, protocols, stablecoins and DEX volume of a chain |
+| Blockscout stats service (`eth.blockscout.com/stats-service`, same pacer as Blockscout) | Ethereum's daily activity |
 | Postgres | the Monad index: indexed tokens, current balances, the largest transfers of each day of the last 7 |
 
 ### The HyperSync quota

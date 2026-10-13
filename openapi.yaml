@@ -51,6 +51,21 @@ info:
     - **Two modes.** The HyperSync key is free and shared with Sona's x402 indexer: 15 requests a minute for both, of which this engine uses at most 3 for the index and 2 for visitors. One request covers about 4,000 to 5,000 Monad blocks (half an hour) wherever the token is active, so a token that has been busy for months (USDC needs about 17,000 requests) cannot be indexed from its first transfer. The engine starts every backfill from block 0 in `full` mode and projects its cost from the pages it reads. When two pages in a row project past 120 requests (config `index.backfill_budget`), it switches to `activity` mode: it reads the last 20,000 blocks (about two hours) and from then on follows every address the token moves, reading each one's balance with `balanceOf`. `index.start_block` says where the index starts. In `activity` mode a holder that has not moved the token since `start_block` is missing, and the record says so in `coverage`.
     - **Positions.** `index.indexed_block` is the last block applied, `index.head_block` the newest block HyperSync knows.
 
+    ## Markets and chain figures
+
+    Beside the token records, the engine serves figures for a whole chain or the whole market. A background loop reads each source, keeps the last good copy in memory and replaces it only when a read succeeds, so a call never waits for a source. Until the first read has finished a route answers 503 `upstream_unavailable`; after it, a source that fails leaves the copy in place, and `coverage` says when the copy is stale.
+
+    | Route | Source | Read every |
+    |---|---|---|
+    | `GET /internal/v1/markets/top-coins` | CoinGecko `/coins/markets` (the 100 largest coins), and `/coins/list?include_platform=true` for the contract addresses on Ethereum and Monad | 5 minutes, addresses 24 hours; at most one CoinGecko request every 20 seconds |
+    | `GET /internal/v1/chains/{chain}/defi/tvl` | DefiLlama `/v2/historicalChainTvl/{Ethereum,Monad}` | 1 hour |
+    | `GET /internal/v1/chains/{chain}/defi/protocols` | DefiLlama `/protocols` | 1 hour |
+    | `GET /internal/v1/chains/{chain}/defi/stablecoins` | DefiLlama stablecoins `/stablecoins` and `/stablecoincharts/{chain}` | 1 hour |
+    | `GET /internal/v1/chains/{chain}/defi/dexs` | DefiLlama `/overview/dexs/{chain}` | 1 hour |
+    | `GET /internal/v1/chains/{chain}/activity` (Ethereum only) | Blockscout stats service `/stats-service/api/v1/lines/{id}` | 1 hour |
+
+    The chain routes take `{chain}` as in the token routes. `RULES.md` says how each number is made and where it falls short.
+
     ## Units
 
     - An **amount** is `{raw, decimals, value}`: `raw` is the integer the contract holds as a decimal string, `decimals` the token's decimals, and `value` the same amount with the decimal point placed, exact and without trailing zeros, such as `"4312358755.535047"`.
@@ -99,6 +114,9 @@ tags:
   - name: Search
     description: |
       Find a token by symbol or name.
+  - name: Markets
+    description: |
+      Coins, DeFi figures and on-chain activity of the served chains, read in the background and held in memory.
   - name: Status
     description: |
       The sources, the HyperSync quota and the Monad index.
@@ -286,6 +304,181 @@ paths:
         "500": {$ref: '#/components/responses/Internal'}
         "503": {$ref: '#/components/responses/Unavailable'}
         "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/markets/top-coins:
+    get:
+      operationId: getTopCoins
+      tags: [Markets]
+      summary: List the largest coins by market cap
+      description: |
+        Call this for the coins at the top of CoinGecko's market-cap ranking, with their price in USD, market cap, 24 hour change and logo. A coin that has a contract on Ethereum or Monad lists it in `tokens`, so a client can link the coin to `GET /internal/v1/chains/{chain}/tokens/{token}`; a coin with none (Bitcoin, Ethereum's own coin) has an empty list. The list is read from CoinGecko every 5 minutes in the background and held in memory, so a call never waits for CoinGecko. `as_of` is the newest `last_updated` CoinGecko gives. The contract addresses are read once a day. `limit` is 1 to 100, default 50. A coin without a price or market cap is left out.
+      parameters:
+        - {$ref: '#/components/parameters/CoinLimit'}
+        - {$ref: '#/components/parameters/DeadlineMs'}
+      responses:
+        "200":
+          description: The record.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TopCoins'}
+              examples:
+                real:
+                  summary: A real answer
+                  value: {"kind": "top_coins", "as_of": "2026-10-13T18:57:38Z", "items": [{"rank": 2, "id": "ethereum", "symbol": "ETH", "name": "Ethereum", "logo_url": "https://coin-images.coingecko.com/coins/images/279/large/ethereum.png?1696501628", "price_usd": 2508.32, "market_cap_usd": 306343182832, "change_24h_pct": -0.08, "tokens": []}, {"rank": 3, "id": "tether", "symbol": "USDT", "name": "Tether", "logo_url": "https://coin-images.coingecko.com/coins/images/325/large/Tether.png?1696501661", "price_usd": 0.999232, "market_cap_usd": 184058316845, "change_24h_pct": 0.01, "tokens": [{"chain": "eip155:1", "address": "0xdac17f958d2ee523a2206206994597c13d831ec7"}]}, {"rank": 4, "id": "binancecoin", "symbol": "BNB", "name": "BNB", "logo_url": "https://coin-images.coingecko.com/coins/images/825/large/bnb-icon2_2x.png?1696501970", "price_usd": 740.9, "market_cap_usd": 98657602887, "change_24h_pct": -0.29, "tokens": [{"chain": "eip155:1", "address": "0xb8c77482e45f1f44de1745f52c74426c631bdd52"}]}], "coverage": []}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/chains/{chain}/defi/tvl:
+    parameters:
+      - $ref: '#/components/parameters/Chain'
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: getChainTvl
+      tags: [Markets]
+      summary: Get the total value locked of a chain, by day
+      description: |
+        Call this for a chain's DeFi TVL history. `current_usd` is the last point, DefiLlama's TVL of the chain now. `change_1d_pct` and `change_7d_pct` compare it with the point 1 and 7 days before it, and are null when that day is missing. `days` is 30, 90, 365 or all, default 90. The last item is the current UTC day, still in progress. Only `eip155:1` and `eip155:143` are served. The figures come from DefiLlama, are read every hour and held in memory.
+      parameters:
+        - {$ref: '#/components/parameters/TvlDays'}
+      responses:
+        "200":
+          description: The record.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChainTvl'}
+              examples:
+                real:
+                  summary: A real answer
+                  value: {"kind": "chain_tvl", "chain": "eip155:143", "current_usd": 1031104035, "change_1d_pct": 3.5, "change_7d_pct": -0.67, "items": [{"day": "2026-10-11", "tvl_usd": 1001011190}, {"day": "2026-10-12", "tvl_usd": 996281615}, {"day": "2026-10-13", "tvl_usd": 1031104035}], "coverage": ["chain_series_last_day_partial"]}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/chains/{chain}/defi/protocols:
+    parameters:
+      - $ref: '#/components/parameters/Chain'
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: getChainProtocols
+      tags: [Markets]
+      summary: List the DeFi protocols of a chain by TVL
+      description: |
+        Call this for the protocols with the most value locked on a chain, and the total of each category. `tvl_usd` is the protocol's own TVL on this chain. Exchange custody (category CEX) and the chain's own entry (category Chain) are left out, as DefiLlama leaves them out of a chain's TVL. The rows do not add up to the chain's TVL (see `chain_protocols_not_additive`), and the changes are those of the protocol on all its chains (see `chain_protocol_change_all_chains`). `limit` is 1 to 100, default 25, and applies to `items` only; `categories` covers every protocol. The list is read from DefiLlama every hour.
+      parameters:
+        - {$ref: '#/components/parameters/Limit25'}
+      responses:
+        "200":
+          description: The record.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChainProtocols'}
+              examples:
+                real:
+                  summary: A real answer
+                  value: {"kind": "chain_protocols", "chain": "eip155:1", "items": [{"name": "Lido", "slug": "lido", "category": "Liquid Staking", "tvl_usd": 24283130927.121544, "change_1d_pct": -1.07, "change_7d_pct": -8.11, "logo_url": "https://icons.llamao.fi/icons/protocols/lido"}, {"name": "Aave V3", "slug": "aave-v3", "category": "Lending", "tvl_usd": 14594920497.827854, "change_1d_pct": 0.57, "change_7d_pct": -5.03, "logo_url": "https://icons.llamao.fi/icons/protocols/aave-v3"}, {"name": "SSV Network", "slug": "ssv-network", "category": "Staking Pool", "tvl_usd": 13104907905.89436, "change_1d_pct": -0.09, "change_7d_pct": -7.14, "logo_url": "https://icons.llamao.fi/icons/protocols/ssv-network"}], "categories": [{"category": "Liquid Staking", "tvl_usd": 42568697066.305435, "protocols": 41}, {"category": "Lending", "tvl_usd": 31757570325.12858, "protocols": 137}, {"category": "Bridge", "tvl_usd": 14484994260.646814, "protocols": 81}], "coverage": ["chain_protocols_not_additive", "chain_protocol_change_all_chains"]}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/chains/{chain}/defi/stablecoins:
+    parameters:
+      - $ref: '#/components/parameters/Chain'
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: getChainStablecoins
+      tags: [Markets]
+      summary: Get the stablecoins circulating on a chain
+      description: |
+        Call this for the USD-pegged stablecoins on a chain: the 15 largest by circulating dollars, and the daily total supply over the last 365 days. `total_usd` is the last point of `history` (DefiLlama's stablecoin chart), which counts every stablecoin of the chain, so it can be above the sum of `items`. The last history item is the current UTC day. Read from DefiLlama every hour.
+      responses:
+        "200":
+          description: The record.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChainStablecoins'}
+              examples:
+                real:
+                  summary: A real answer
+                  value: {"kind": "chain_stablecoins", "chain": "eip155:143", "total_usd": 814646450.53, "items": [{"symbol": "USDC", "name": "USD Coin", "circulating_usd": 225331622.33297294}, {"symbol": "USDe", "name": "Ethena USDe", "circulating_usd": 142212308.76362443}, {"symbol": "AUSD", "name": "Agora Dollar", "circulating_usd": 109130289.51431903}], "history": [{"day": "2026-10-11", "total_usd": 751512476}, {"day": "2026-10-12", "total_usd": 745042882}, {"day": "2026-10-13", "total_usd": 814646450.53}], "coverage": ["chain_series_last_day_partial"]}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/chains/{chain}/defi/dexs:
+    parameters:
+      - $ref: '#/components/parameters/Chain'
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: getChainDexVolume
+      tags: [Markets]
+      summary: Get the DEX trading volume of a chain
+      description: |
+        Call this for a chain's decentralized exchange volume in USD: DefiLlama's headline totals, the daily volume over the last `days` days (30, 90 or 365, default 90) and the 15 DEX protocols with the most volume in the last 24 hours. The headline totals and the protocol rows are DefiLlama's own and are not summed from the daily items (see RULES.md). The last item is the current UTC day. Read from DefiLlama every hour.
+      parameters:
+        - {$ref: '#/components/parameters/SeriesDays'}
+      responses:
+        "200":
+          description: The record.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChainDexVolume'}
+              examples:
+                real:
+                  summary: A real answer
+                  value: {"kind": "chain_dex_volume", "chain": "eip155:143", "total_24h_usd": 33337989.49, "total_7d_usd": 268481735.47999996, "total_30d_usd": 2866487262.6300006, "change_1d_pct": 39.87, "items": [{"day": "2026-10-11", "volume_usd": 23835223.37}, {"day": "2026-10-12", "volume_usd": 33337989.49}, {"day": "2026-10-13", "volume_usd": 36632095.67}], "protocols": [{"name": "Uniswap V4", "volume_24h_usd": 19928810, "volume_7d_usd": 145554247, "logo_url": "https://icons.llamao.fi/icons/protocols/uniswap-v4"}, {"name": "Uniswap V3", "volume_24h_usd": 3094555, "volume_7d_usd": 13386080, "logo_url": "https://icons.llamao.fi/icons/protocols/uniswap-v3"}, {"name": "Curve DEX", "volume_24h_usd": 2554101, "volume_7d_usd": 15347861, "logo_url": "https://icons.llamao.fi/icons/protocols/curve"}], "coverage": ["chain_series_last_day_partial"]}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/chains/{chain}/activity:
+    parameters:
+      - $ref: '#/components/parameters/Chain'
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: getChainActivity
+      tags: [Markets]
+      summary: Get the daily on-chain activity of a chain
+      description: |
+        Call this for six daily series of a chain: transactions, active accounts, new accounts, the average gas price in gwei, the transaction fees in ETH and the block utilization in percent. `days` is 30, 90 or 365, default 90. Only Ethereum (`eip155:1`) has them, from Blockscout's stats service; Monad answers 404 `unsupported_chain` because no source is wired for it. The last item is the current UTC day. Read every hour.
+      parameters:
+        - {$ref: '#/components/parameters/SeriesDays'}
+      responses:
+        "200":
+          description: The record.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChainActivity'}
+              examples:
+                real:
+                  summary: A real answer
+                  value: {"kind": "chain_activity", "chain": "eip155:1", "series": [{"metric": "txs", "items": [{"day": "2026-10-12", "value": 1881461}, {"day": "2026-10-13", "value": 1498844}]}, {"metric": "active_accounts", "items": [{"day": "2026-10-12", "value": 518135}, {"day": "2026-10-13", "value": 86173}]}, {"metric": "new_accounts", "items": [{"day": "2026-10-12", "value": 136413}, {"day": "2026-10-13", "value": 15865}]}, {"metric": "gas_price_gwei", "items": [{"day": "2026-10-12", "value": 0.8657337450604846}, {"day": "2026-10-13", "value": 0.8802943839968326}]}, {"metric": "fees_eth", "items": [{"day": "2026-10-12", "value": 156.15386569207703}, {"day": "2026-10-13", "value": 39.541274068388226}]}, {"metric": "utilization_pct", "items": [{"day": "2026-10-12", "value": 50.5289}, {"day": "2026-10-13", "value": 50.5257}]}], "coverage": ["chain_series_last_day_partial"]}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
   /healthz:
     get:
       operationId: getHealth
@@ -346,6 +539,30 @@ components:
       description: |
         The most time, in milliseconds, that this call may take. The default is 5000, used when the header is absent or is not a whole number. A value of 0 or less answers 504 at once.
       schema: {type: integer, format: int64}
+    CoinLimit:
+      name: limit
+      in: query
+      required: false
+      description: How many coins to return, from 1 to 100. The default is 50.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    Limit25:
+      name: limit
+      in: query
+      required: false
+      description: How many protocols to return, from 1 to 100. The default is 25.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+    TvlDays:
+      name: days
+      in: query
+      required: false
+      description: How many days of history, `30`, `90`, `365` or `all` (every day DefiLlama has). The default is 90. Any other value answers 400 `invalid_query`.
+      schema: {type: string, enum: ["30", "90", "365", "all"], default: "90"}
+    SeriesDays:
+      name: days
+      in: query
+      required: false
+      description: How many days of history, `30`, `90` or `365`. The default is 90. Any other value answers 400 `invalid_query`.
+      schema: {type: string, enum: ["30", "90", "365"], default: "90"}
   headers:
     RequestId:
       description: A 32-character hex ID that identifies this one request in the service log. It is the trace ID of the incoming `traceparent` header, or a random one. It is on every answer except `/healthz` and `/readyz`.
@@ -702,3 +919,197 @@ components:
                       last_error: {type: [string, "null"]}
             - {type: "null"}
         coverage: {type: array, items: {$ref: '#/components/schemas/Note'}}
+    MarketCoverageCode:
+      type: string
+      enum: [market_top_coins_stale, market_token_map_unavailable, chain_defi_stale, chain_activity_stale, chain_series_last_day_partial, chain_protocols_not_additive, chain_protocol_change_all_chains]
+      description: |
+        A limit that applies to a market record. `market_top_coins_stale` CoinGecko's list could not be refreshed for over 15 minutes. `market_token_map_unavailable` the contract addresses of CoinGecko have not loaded, or are over 3 days old, so `tokens` may be empty. `chain_defi_stale` DefiLlama could not be refreshed for over 3 hours. `chain_activity_stale` Blockscout's stats could not be refreshed for over 3 hours. `chain_series_last_day_partial` the last item is the current UTC day, still in progress. `chain_protocols_not_additive` protocol rows do not add up to the chain's TVL. `chain_protocol_change_all_chains` the changes are those of the protocol on all its chains.
+    MarketCoverage:
+      type: array
+      items: {$ref: '#/components/schemas/MarketCoverageCode'}
+      description: The limits that apply, in a fixed order, empty when none does.
+    Day:
+      type: string
+      format: date
+      description: A UTC day, `YYYY-MM-DD`.
+    Pct:
+      type: [number, "null"]
+      description: A percent change rounded to 2 decimals, null when it cannot be computed.
+    CoinToken:
+      type: object
+      additionalProperties: false
+      required: [chain, address]
+      properties:
+        chain: {$ref: '#/components/schemas/Chain'}
+        address: {$ref: '#/components/schemas/Address'}
+    TopCoin:
+      type: object
+      additionalProperties: false
+      required: [rank, id, symbol, name, logo_url, price_usd, market_cap_usd, change_24h_pct, tokens]
+      properties:
+        rank: {type: integer, minimum: 1, description: "CoinGecko's market cap rank."}
+        id: {type: string, description: "CoinGecko's coin id."}
+        symbol: {type: string, description: Upper case.}
+        name: {type: string}
+        logo_url: {type: [string, "null"], description: "CoinGecko's image, an https URL, or null."}
+        price_usd: {type: number}
+        market_cap_usd: {type: number}
+        change_24h_pct: {$ref: '#/components/schemas/Pct'}
+        tokens:
+          type: array
+          description: The coin's contracts on the served chains, Ethereum first. Empty for a coin with none.
+          items: {$ref: '#/components/schemas/CoinToken'}
+    TopCoins:
+      type: object
+      additionalProperties: false
+      required: [kind, as_of, items, coverage]
+      properties:
+        kind: {type: string, enum: [top_coins]}
+        as_of: {$ref: '#/components/schemas/Time'}
+        items: {type: array, items: {$ref: '#/components/schemas/TopCoin'}}
+        coverage: {$ref: '#/components/schemas/MarketCoverage'}
+    ChainTvl:
+      type: object
+      additionalProperties: false
+      required: [kind, chain, current_usd, change_1d_pct, change_7d_pct, items, coverage]
+      properties:
+        kind: {type: string, enum: [chain_tvl]}
+        chain: {$ref: '#/components/schemas/Chain'}
+        current_usd: {type: number}
+        change_1d_pct: {$ref: '#/components/schemas/Pct'}
+        change_7d_pct: {$ref: '#/components/schemas/Pct'}
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [day, tvl_usd]
+            properties:
+              day: {$ref: '#/components/schemas/Day'}
+              tvl_usd: {type: number}
+        coverage: {$ref: '#/components/schemas/MarketCoverage'}
+    ChainProtocols:
+      type: object
+      additionalProperties: false
+      required: [kind, chain, items, categories, coverage]
+      properties:
+        kind: {type: string, enum: [chain_protocols]}
+        chain: {$ref: '#/components/schemas/Chain'}
+        items:
+          type: array
+          description: Largest first.
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, slug, category, tvl_usd, change_1d_pct, change_7d_pct, logo_url]
+            properties:
+              name: {type: string}
+              slug: {type: string, description: "DefiLlama's slug."}
+              category: {type: string}
+              tvl_usd: {type: number, description: "The protocol's own TVL on this chain."}
+              change_1d_pct: {$ref: '#/components/schemas/Pct'}
+              change_7d_pct: {$ref: '#/components/schemas/Pct'}
+              logo_url: {type: [string, "null"]}
+        categories:
+          type: array
+          description: Every category of the chain, largest first, counting every protocol and not only the `limit` listed.
+          items:
+            type: object
+            additionalProperties: false
+            required: [category, tvl_usd, protocols]
+            properties:
+              category: {type: string}
+              tvl_usd: {type: number}
+              protocols: {type: integer, minimum: 1}
+        coverage: {$ref: '#/components/schemas/MarketCoverage'}
+    ChainStablecoins:
+      type: object
+      additionalProperties: false
+      required: [kind, chain, total_usd, items, history, coverage]
+      properties:
+        kind: {type: string, enum: [chain_stablecoins]}
+        chain: {$ref: '#/components/schemas/Chain'}
+        total_usd: {type: number, description: "The last point of `history`."}
+        items:
+          type: array
+          description: The 15 largest USD-pegged stablecoins on the chain, largest first.
+          items:
+            type: object
+            additionalProperties: false
+            required: [symbol, name, circulating_usd]
+            properties:
+              symbol: {type: string}
+              name: {type: string}
+              circulating_usd: {type: number}
+        history:
+          type: array
+          description: Up to the last 365 days, oldest first.
+          items:
+            type: object
+            additionalProperties: false
+            required: [day, total_usd]
+            properties:
+              day: {$ref: '#/components/schemas/Day'}
+              total_usd: {type: number}
+        coverage: {$ref: '#/components/schemas/MarketCoverage'}
+    ChainDexVolume:
+      type: object
+      additionalProperties: false
+      required: [kind, chain, total_24h_usd, total_7d_usd, total_30d_usd, change_1d_pct, items, protocols, coverage]
+      properties:
+        kind: {type: string, enum: [chain_dex_volume]}
+        chain: {$ref: '#/components/schemas/Chain'}
+        total_24h_usd: {type: [number, "null"], description: "DefiLlama's headline for the chain."}
+        total_7d_usd: {type: [number, "null"]}
+        total_30d_usd: {type: [number, "null"]}
+        change_1d_pct: {$ref: '#/components/schemas/Pct'}
+        items:
+          type: array
+          description: Daily volume, oldest first.
+          items:
+            type: object
+            additionalProperties: false
+            required: [day, volume_usd]
+            properties:
+              day: {$ref: '#/components/schemas/Day'}
+              volume_usd: {type: number}
+        protocols:
+          type: array
+          description: Up to 15 DEX protocols with volume in the last 24 hours, largest first.
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, volume_24h_usd, volume_7d_usd, logo_url]
+            properties:
+              name: {type: string}
+              volume_24h_usd: {type: number}
+              volume_7d_usd: {type: [number, "null"]}
+              logo_url: {type: [string, "null"]}
+        coverage: {$ref: '#/components/schemas/MarketCoverage'}
+    ChainActivity:
+      type: object
+      additionalProperties: false
+      required: [kind, chain, series, coverage]
+      properties:
+        kind: {type: string, enum: [chain_activity]}
+        chain: {$ref: '#/components/schemas/Chain'}
+        series:
+          type: array
+          description: Six series in a fixed order. `txs` is transactions a day, `active_accounts` and `new_accounts` are accounts, `gas_price_gwei` the average gas price in gwei, `fees_eth` the fees paid in ETH and `utilization_pct` the average share of the gas limit used, from 0 to 100.
+          items:
+            type: object
+            additionalProperties: false
+            required: [metric, items]
+            properties:
+              metric: {type: string, enum: [txs, active_accounts, new_accounts, gas_price_gwei, fees_eth, utilization_pct]}
+              items:
+                type: array
+                description: Oldest first.
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [day, value]
+                  properties:
+                    day: {$ref: '#/components/schemas/Day'}
+                    value: {type: number}
+        coverage: {$ref: '#/components/schemas/MarketCoverage'}

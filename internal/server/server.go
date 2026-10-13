@@ -88,6 +88,11 @@ func New(svc Service, m *Metrics) http.Handler {
 		mux.HandleFunc(rt.pattern, a.serve(rt.handler(a), true))
 	}
 	mux.HandleFunc("GET "+searchPath, a.serve(a.search(), false))
+	if mk, ok := svc.(Markets); ok {
+		for _, rt := range marketRoutes {
+			mux.HandleFunc(rt.pattern, a.serve(rt.handler(a, mk), false))
+		}
+	}
 	mux.HandleFunc("GET /internal/v1/status", a.serve(a.status(), false))
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		problem.Write(w, problem.New(problem.CodeNotFound, "No such route.", req.URL.EscapedPath()))

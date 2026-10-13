@@ -226,6 +226,9 @@ func TestSpecOperationsAreTheRoutes(t *testing.T) {
 	for _, rt := range routes {
 		served = append(served, rt.pattern)
 	}
+	for _, rt := range marketRoutes {
+		served = append(served, rt.pattern)
+	}
 	slices.Sort(documented)
 	slices.Sort(served)
 	if !slices.Equal(documented, served) {
