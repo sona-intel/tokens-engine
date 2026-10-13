@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Records the real answers the tests read. Run from the repository root:
 
-    python3 -I testdata/tools/record.py rpc|blockscout|gecko|prices|hypersync
+    python3 -I testdata/tools/record.py rpc|blockscout|gecko|prices|hypersync|lists|search
 
 rpc needs the RPC router on 127.0.0.1:4000, prices the prices service on 127.0.0.1:8210,
 hypersync the key in ENVIO_HYPERSYNC_KEY (it is sent, never written). Every file holds the
@@ -140,6 +140,45 @@ def hypersync(host, name, query):
     save(f"hypersync/{name}.request.json", body)
 
 
+LIST_URLS = {
+    "uniswap": "https://tokens.uniswap.org",
+    "monad": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/tokenlist-mainnet.json",
+}
+# the Uniswap list is too long to keep whole (700 KB), so it keeps its header and, as parsed and written again,
+# the Ethereum and Monad entries whose symbol or name holds one of these words
+LIST_WORDS = ("USDC", "WMON", "PEPE", "MON")
+LIST_CHAINS = (1, 143)
+
+
+def record_lists():
+    for name, url in LIST_URLS.items():
+        status, raw, _ = fetch(url, headers={"Accept": "application/json"})
+        assert status == 200, (name, status)
+        if name == "monad":
+            save("lists/monad.json", raw)
+            continue
+        doc = json.loads(raw)
+        doc["tokens"] = [t for t in doc["tokens"] if t["chainId"] in LIST_CHAINS and any(w in (t["symbol"] + " " + t["name"]).upper() for w in LIST_WORDS)]
+        save(f"lists/{name}.json", json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode())
+        time.sleep(1)
+
+
+def record_search():
+    base = "https://api.geckoterminal.com/api/v2/search/pools?include=base_token%2Cquote_token&network="
+    for network in ("eth", "monad"):
+        for q in ("usdc", "mon", "wmon", "pepe"):
+            for _ in range(6):
+                status, raw, _ = fetch(f"{base}{network}&query={q}", headers={"Accept": "application/json"})
+                if status != 429:
+                    break
+                print(" 429, waiting")
+                time.sleep(30)
+            assert status == 200, status
+            save(f"gecko/search.{network}.{q}.json", raw)
+            print(" status", status)
+            time.sleep(3)
+
+
 def record_hypersync():
     fields = {"log": LOG_FIELDS, "block": ["number", "timestamp"]}
     hypersync("monad.hypersync.xyz", "monad_usdc", {"from_block": 113000000, "to_block": 113000040,
@@ -151,4 +190,4 @@ def record_hypersync():
 
 
 if __name__ == "__main__":
-    {"rpc": record_rpc, "blockscout": record_blockscout, "gecko": record_gecko, "prices": record_prices, "hypersync": record_hypersync}[sys.argv[1]]()
+    {"rpc": record_rpc, "blockscout": record_blockscout, "gecko": record_gecko, "prices": record_prices, "hypersync": record_hypersync, "lists": record_lists, "search": record_search}[sys.argv[1]]()

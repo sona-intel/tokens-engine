@@ -1,0 +1,2712 @@
+{
+  "name": "Monad Mainnet",
+  "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/assets/monad.svg",
+  "keywords": [
+    "monad mainnet"
+  ],
+  "timestamp": "2026-10-02T07:54:04.145003+00:00",
+  "tokens": [
+    {
+      "chainId": 143,
+      "address": "0x91D93DBd823221ea9E54fb3e447BD917CE41f2e8",
+      "name": "Pareto AA Tranche - FalconXUSDC",
+      "symbol": "AA_FalconXUSDC",
+      "decimals": 18,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x91D93DBd823221ea9E54fb3e447BD917CE41f2e8"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xC26A6Fa2C37b38E549a4a1807543801Db684f99C"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/AA_FalconXUSDC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x2FaBf1c784B8583d63C00c5c9C0377D8cf1a3245",
+      "name": "Anemoy Tokenized Apollo Diversified Credit Fund Token",
+      "symbol": "ACRDX",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "anemoy-tokenized-apollo-diversified-credit-fund",
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x9477724Bb54AD5417de8Baff29e59DF3fB4DA74f"
+          },
+          "10": {
+            "address": "0x2FaBf1c784B8583d63C00c5c9C0377D8cf1a3245"
+          },
+          "8453": {
+            "address": "0x9477724Bb54AD5417de8Baff29e59DF3fB4DA74f"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/ACRDX/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a",
+      "name": "AUSD",
+      "symbol": "AUSD",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "agora-dollar",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x9CaB7Ede13dc56652E44D2404E969C212f22689b"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a"
+          },
+          "56": {
+            "address": "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a"
+          },
+          "137": {
+            "address": "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a"
+          },
+          "8453": {
+            "address": "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a"
+          },
+          "9745": {
+            "address": "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a",
+            "symbol": "AUSD0"
+          },
+          "42161": {
+            "address": "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a"
+          },
+          "43114": {
+            "address": "0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/AUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x4917a5ec9fCb5e10f47CBB197aBe6aB63be81fE8",
+      "name": "Asian Dollar",
+      "symbol": "AZND",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "mu-digital-aznd"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/AZND/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xB0F70C0bD6FD87dbEb7C10dC692a2a6106817072",
+      "name": "Bitcoin",
+      "symbol": "BTC.b",
+      "decimals": 8,
+      "extensions": {
+        "coinGeckoId": "bitcoin-avalanche-bridged-btc-b",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xB0F70C0bD6FD87dbEb7C10dC692a2a6106817072"
+          },
+          "43114": {
+            "address": "0x152b9d0FdC40C096757F570A51E494bd4b943E50"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/BTC.b/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x834df4C1d8f51Be24322E39e4766697BE015512F",
+      "name": "Etherfuse CETES",
+      "symbol": "CETES",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "cetes",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x834df4C1d8f51Be24322E39e4766697BE015512F"
+        },
+        "crossChainAddresses": {
+          "137": {
+            "address": "0x834df4C1d8f51Be24322E39e4766697BE015512F"
+          },
+          "8453": {
+            "address": "0x834df4C1d8f51Be24322E39e4766697BE015512F"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/CETES/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0xF64e91fFEf7ef43aA314F0Bc2AC39f770797990C",
+      "name": "Mento Swiss Franc",
+      "symbol": "CHFm",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "cchf",
+        "bridgeInfo": {
+          "protocol": "Wormhole NTT",
+          "bridgeAddress": "0xbbFBE2791722E93f27c5cE80e3725c8DD8d09697"
+        },
+        "crossChainAddresses": {
+          "42220": {
+            "address": "0xb55a79F398E759E43C95b979163f30eC87Ee131D"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/CHFm/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3",
+      "name": "PancakeSwap Token",
+      "symbol": "Cake",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "pancakeswap-token",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x152649eA73beAb28c5b49B26eb48f7EAD6d4c898"
+          },
+          "56": {
+            "address": "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82"
+          },
+          "8453": {
+            "address": "0x3055913c90Fcc1A6CE9a358911721eEb942013A1"
+          },
+          "42161": {
+            "address": "0x1b896893dfc86bb67Cf57767298b9073D2c1bA2c"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/Cake/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xAD96C3dffCD6374294e2573A7fBBA96097CC8d7c",
+      "name": "Pixie Dust",
+      "symbol": "DUST",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "pixie-dust"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/DUST/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133",
+      "name": "ENA",
+      "symbol": "ENA",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "ethena",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x57e114B691Db790C35207b2e685D4A43181e6061"
+          },
+          "10": {
+            "address": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133"
+          },
+          "56": {
+            "address": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133"
+          },
+          "999": {
+            "address": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133"
+          },
+          "8453": {
+            "address": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133"
+          },
+          "9745": {
+            "address": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133"
+          },
+          "42161": {
+            "address": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133"
+          },
+          "43114": {
+            "address": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/ENA/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xDef72Af3fc69E1Dd5a094f7DDa08Ba203CD0438B",
+      "name": "Euler",
+      "symbol": "EUL",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "euler",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x831257BFa5478111d2327e08c4068ec37Ac14B81"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xd9Fcd98c322942075A5C3860693e9f4f03AAE07b"
+          },
+          "56": {
+            "address": "0x2117E8b79e8E176A670c9fCf945d4348556bfFad"
+          },
+          "8453": {
+            "address": "0xa153Ad732F831a79b5575Fa02e793EC4E99181b0"
+          },
+          "42161": {
+            "address": "0x462cD9E0247b2e63831c3189aE738E5E9a5a4b64"
+          },
+          "43114": {
+            "address": "0x9ceeD3A7f753608372eeAb300486cc7c2F38AC68"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/EUL/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xC6221856E45ed806F8325a084bED3D69D32C526d",
+      "name": "Etherfuse EUROB",
+      "symbol": "EUROB",
+      "decimals": 6,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xC6221856E45ed806F8325a084bED3D69D32C526d"
+        },
+        "crossChainAddresses": {
+          "137": {
+            "address": "0xC6221856E45ed806F8325a084bED3D69D32C526d"
+          },
+          "8453": {
+            "address": "0xC6221856E45ed806F8325a084bED3D69D32C526d"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/EUROB/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x1111B3DED9F1fE1801AD4ebeF8E2788183a24111",
+      "name": "Newrails Euro",
+      "symbol": "EURW",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "newrails-euro"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/EURW/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x4D502d735B4C574B487Ed641ae87cEaE884731C7",
+      "name": "Mento Euro",
+      "symbol": "EURm",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "celo-euro",
+        "bridgeInfo": {
+          "protocol": "Wormhole NTT",
+          "bridgeAddress": "0x5F8a1e50F83f53951B89Fc73Ead80b27045C67fd"
+        },
+        "crossChainAddresses": {
+          "137": {
+            "address": "0x4D502d735B4C574B487Ed641ae87cEaE884731C7"
+          },
+          "42220": {
+            "address": "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/EURm/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xFF7F8F301F7A706E3CfD3D2275f5dc0b9EE8009B",
+      "name": "Folks Finance",
+      "symbol": "FOLKS",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "folks",
+        "bridgeInfo": {
+          "protocol": "Wormhole NTT",
+          "bridgeAddress": "0xd15274c3910600a8246C86a198DE18618Cd47401"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xFF7F8F301F7A706E3CfD3D2275f5dc0b9EE8009B"
+          },
+          "56": {
+            "address": "0xFF7F8F301F7A706E3CfD3D2275f5dc0b9EE8009B"
+          },
+          "137": {
+            "address": "0xFF7F8F301F7A706E3CfD3D2275f5dc0b9EE8009B"
+          },
+          "8453": {
+            "address": "0xFF7F8F301F7A706E3CfD3D2275f5dc0b9EE8009B"
+          },
+          "42161": {
+            "address": "0xFF7F8F301F7A706E3CfD3D2275f5dc0b9EE8009B"
+          },
+          "43114": {
+            "address": "0xFF7F8F301F7A706E3CfD3D2275f5dc0b9EE8009B"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/FOLKS/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x9f6714C302ffe3c3bAFaf2Ccb44201fF64f6371C",
+      "name": "FinChain Dollar",
+      "symbol": "FUSD",
+      "decimals": 18,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x9f6714C302ffe3c3bAFaf2Ccb44201fF64f6371C"
+          },
+          "43114": {
+            "address": "0x9f6714C302ffe3c3bAFaf2Ccb44201fF64f6371C"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/FUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x3fea1cb36D2C5523c062d0E060EAC253608b4DAf",
+      "name": "FinChain Dollar LP",
+      "symbol": "FUSDLP",
+      "decimals": 18,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x3fea1cb36D2C5523c062d0E060EAC253608b4DAf"
+          },
+          "43114": {
+            "address": "0x3fea1cb36D2C5523c062d0E060EAC253608b4DAf"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/FUSDLP/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xCE6170EA245dC8D1f275A710a062b70f125F0110",
+      "name": "FXRP",
+      "symbol": "FXRP",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "flare-bridged-xrp-flare",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xCE6170EA245dC8D1f275A710a062b70f125F0110"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xCE6170EA245dC8D1f275A710a062b70f125F0110"
+          },
+          "56": {
+            "address": "0xCE6170EA245dC8D1f275A710a062b70f125F0110"
+          },
+          "999": {
+            "address": "0xd70659a6396285BF7214d7Ea9673184e7C72E07E"
+          },
+          "8453": {
+            "address": "0xCE6170EA245dC8D1f275A710a062b70f125F0110"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/FXRP/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x39bb4E0a204412bB98e821d25e7d955e69d40Fd1",
+      "name": "Mento British Pound",
+      "symbol": "GBPm",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "celo-british-pound",
+        "bridgeInfo": {
+          "protocol": "Wormhole NTT",
+          "bridgeAddress": "0x7895D03FfDeb14a57eF79c21C3eA14dADf2a7c3f"
+        },
+        "crossChainAddresses": {
+          "42220": {
+            "address": "0xCCF663b1fF11028f0b19058d0f7B674004a40746"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/GBPm/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xfc421aD3C883Bf9E7C4f42dE845C4e4405799e73",
+      "name": "Gho Token",
+      "symbol": "GHO",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "gho",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f"
+          },
+          "8453": {
+            "address": "0x6Bb7a212910682DCFdbd5BCBb3e28FB4E8da10Ee"
+          },
+          "9745": {
+            "address": "0xb77E872A68C62CfC0dFb02C067Ecc3DA23B4bbf3"
+          },
+          "42161": {
+            "address": "0x7dfF72693f6A4149b17e7C6314655f6A9F7c8B33"
+          },
+          "43114": {
+            "address": "0xfc421aD3C883Bf9E7C4f42dE845C4e4405799e73"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/GHO/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x46080F31351A6568f44575E3EFfDE7f0C86867f9",
+      "name": "Etherfuse GILTS",
+      "symbol": "GILTS",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "etherfuse-gilts",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x46080F31351A6568f44575E3EFfDE7f0C86867f9"
+        },
+        "crossChainAddresses": {
+          "137": {
+            "address": "0x46080F31351A6568f44575E3EFfDE7f0C86867f9"
+          },
+          "8453": {
+            "address": "0x0ff2CBAfcCAe23A704d954B43910e864291fd03A"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/GILTS/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x18Bc5bcC660cf2B9cE3cd51a404aFe1a0cBD3C22",
+      "name": "IDRX",
+      "symbol": "IDRX",
+      "decimals": 2,
+      "extensions": {
+        "coinGeckoId": "idrx"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/IDRX/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xAD48F183E586e92A591A610397ebf534609DF797",
+      "name": "Janus Henderson AAA CLO Fund",
+      "symbol": "JAAA",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "janus-henderson-anemoy-aaa-clo-fund",
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x5a0F93D040De44e78F251b03c43be9CF317Dcf64"
+          },
+          "56": {
+            "address": "0x58F93d6b1EF2F44eC379Cb975657C132CBeD3B6b"
+          },
+          "8453": {
+            "address": "0x5a0F93D040De44e78F251b03c43be9CF317Dcf64"
+          },
+          "42161": {
+            "address": "0x58F93d6b1EF2F44eC379Cb975657C132CBeD3B6b"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/JAAA/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x22f6A6752800eAB67b84748FeFc3cC658384aF72",
+      "name": "Mento Japanese Yen",
+      "symbol": "JPYm",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "celo-japanese-yen",
+        "bridgeInfo": {
+          "protocol": "Wormhole NTT",
+          "bridgeAddress": "0x7431419FE761e7da37587245c55a35E5a356c91B"
+        },
+        "crossChainAddresses": {
+          "42220": {
+            "address": "0xc45eCF20f3CD864B32D9794d6f76814aE8892e20"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/JPYm/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xC18e6f730896971a79D748E8deA61067A9Bc6040",
+      "name": "Janus Henderson Treasury Fund",
+      "symbol": "JTRSY",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "janus-henderson-anemoy-treasury-fund",
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x8c213ee79581Ff4984583C6a801e5263418C4b86"
+          },
+          "56": {
+            "address": "0xa5d465251fBCc907f5Dd6bB2145488DFC6a2627b"
+          },
+          "8453": {
+            "address": "0x8c213ee79581Ff4984583C6a801e5263418C4b86"
+          },
+          "42161": {
+            "address": "0x8c213ee79581Ff4984583C6a801e5263418C4b86"
+          },
+          "43114": {
+            "address": "0xa5d465251fBCc907f5Dd6bB2145488DFC6a2627b"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/JTRSY/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xe9c082921dc3564e10196c5cc15dB1250AC7d5C6",
+      "name": "Etherfuse KTB",
+      "symbol": "KTB",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "etherfuse-ktb",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xe9c082921dc3564e10196c5cc15dB1250AC7d5C6"
+        },
+        "crossChainAddresses": {
+          "137": {
+            "address": "0xe56CEe16B76903b3C8eB4Af3C06d1D2FAB320f95"
+          },
+          "8453": {
+            "address": "0x0f9B0468391CfA83160dAE6b693dF87df379bD06"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/KTB/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0xecAc9C5F704e954931349Da37F60E39f515c11c1",
+      "name": "Lombard Staked Bitcoin",
+      "symbol": "LBTC",
+      "decimals": 8,
+      "extensions": {
+        "coinGeckoId": "lombard-staked-btc",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x8236a87084f8B84306f72007F36F2618A5634494"
+          },
+          "56": {
+            "address": "0xecAc9C5F704e954931349Da37F60E39f515c11c1"
+          },
+          "8453": {
+            "address": "0xecAc9C5F704e954931349Da37F60E39f515c11c1"
+          },
+          "43114": {
+            "address": "0xecAc9C5F704e954931349Da37F60E39f515c11c1"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/LBTC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x76f257B1DDA5cC71bee4eF637Fbdde4C801310A9",
+      "name": "ChainLink Token",
+      "symbol": "LINK",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "chainlink",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x514910771AF9Ca656af840dff83E8264EcF986CA"
+          },
+          "10": {
+            "address": "0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6"
+          },
+          "56": {
+            "address": "0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD"
+          },
+          "137": {
+            "address": "0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39"
+          },
+          "999": {
+            "address": "0x1AC2EE68b8d038C982C1E1f73F596927dd70De59"
+          },
+          "8453": {
+            "address": "0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196"
+          },
+          "9745": {
+            "address": "0x76a443768A5e3B8d1AED0105FC250877841Deb40"
+          },
+          "42161": {
+            "address": "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"
+          },
+          "42220": {
+            "address": "0xd07294e6E917e07dfDcee882dd1e2565085C2ae0"
+          },
+          "43114": {
+            "address": "0x5947BB275c521040051D82396192181b413227A3",
+            "symbol": "LINK.e"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/LINK/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x1001fF13bf368Aa4fa85F21043648079F00E1001",
+      "name": "LeverUp",
+      "symbol": "LV",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "leverup"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/LV/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56",
+      "name": "LeverUp MON",
+      "symbol": "LVMON",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "leverup-mon"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/LVMON/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xFD44B35139Ae53FFF7d8F2A9869c503D987f00d1",
+      "name": "LeverUp USD",
+      "symbol": "LVUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "leverup-usd"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/LVUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x866A2BF4E572CbcF37D5071A7a58503Bfb36be1b",
+      "name": "M by M0",
+      "symbol": "M",
+      "decimals": 6,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "M0 Portal",
+          "bridgeAddress": "0xD925C84b55E4e44a53749fF5F2a5A13F63D128fd"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x866A2BF4E572CbcF37D5071A7a58503Bfb36be1b"
+          },
+          "10": {
+            "address": "0x866A2BF4E572CbcF37D5071A7a58503Bfb36be1b"
+          },
+          "56": {
+            "address": "0x866A2BF4E572CbcF37D5071A7a58503Bfb36be1b"
+          },
+          "999": {
+            "address": "0x866A2BF4E572CbcF37D5071A7a58503Bfb36be1b"
+          },
+          "8453": {
+            "address": "0x866A2BF4E572CbcF37D5071A7a58503Bfb36be1b"
+          },
+          "9745": {
+            "address": "0x866A2BF4E572CbcF37D5071A7a58503Bfb36be1b"
+          },
+          "42161": {
+            "address": "0x866A2BF4E572CbcF37D5071A7a58503Bfb36be1b"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/M/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x0000000000000000000000000000000000000000",
+      "name": "Monad",
+      "symbol": "MON",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "monad"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/MON/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x04f8c38AE80BcF690B947f60F62BdA18145c3D67",
+      "name": "Monad Vault",
+      "symbol": "MVT",
+      "decimals": 18,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/MVT/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xD33F18D8d48CbbB2f8b47063DE97f94De0D49B99",
+      "name": "NXPC",
+      "symbol": "NXPC",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "bridged-nxpc",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "56": {
+            "address": "0xf2b51CC1850fEd939658317a22d73d3482767591"
+          },
+          "43114": {
+            "address": "0x5E0E90E268BC247Cc850c789A0DB0d5c7621fb59"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/NXPC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x5E49E1f85813F2B65858860A3FA231b4186f2e0E",
+      "name": "Pendle",
+      "symbol": "PENDLE",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "pendle",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x5E49E1f85813F2B65858860A3FA231b4186f2e0E"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x808507121B80c02388fAd14726482e061B8da827"
+          },
+          "10": {
+            "address": "0xBC7B1Ff1c6989f006a1185318eD4E7b5796e66E1"
+          },
+          "56": {
+            "address": "0xb3Ed0A426155B79B898849803E3B36552f7ED507"
+          },
+          "999": {
+            "address": "0xD6Eb81136884713E843936843E286FD2a85A205A"
+          },
+          "8453": {
+            "address": "0xA99F6e6785Da0F5d6fB42495Fe424BCE029Eeb3E"
+          },
+          "42161": {
+            "address": "0x0c880f6761F1af8d9Aa9C466984b80DAb9a8c9e8"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/PENDLE/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x0CB6d03B0aC88A463F67B7Ad99f9f3ec4678092E",
+      "name": "SoFiUSD",
+      "symbol": "SOFID",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "sofiusd",
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x0CB6d03B0aC88A463F67B7Ad99f9f3ec4678092E"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/SOFID/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xea17E5a9efEBf1477dB45082d67010E2245217f1",
+      "name": "Wrapped SOL",
+      "symbol": "SOL",
+      "decimals": 9,
+      "extensions": {
+        "coinGeckoId": "wrapped-solana",
+        "bridgeInfo": {
+          "protocol": "Wormhole",
+          "bridgeAddress": "0x0B2719cdA2F10595369e6673ceA3Ee2EDFa13BA7"
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/SOL/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xaE4EFbc7736f963982aACb17EFA37fCBAb924cB3",
+      "name": "Solv BTC",
+      "symbol": "SolvBTC",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "solv-btc",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x7A56E1C57C7475CCf742a1832B028F0456652F97"
+          },
+          "56": {
+            "address": "0x4aae823a6a0b376De6A78e74eCC5b079d38cBCf7"
+          },
+          "137": {
+            "address": "0xaE4EFbc7736f963982aACb17EFA37fCBAb924cB3"
+          },
+          "999": {
+            "address": "0xaE4EFbc7736f963982aACb17EFA37fCBAb924cB3"
+          },
+          "8453": {
+            "address": "0x3B86Ad95859b6AB773f55f8d94B4b9d443EE931f"
+          },
+          "42161": {
+            "address": "0x3647c54c4c2C65bC7a2D63c0Da2809B399DBBDC0"
+          },
+          "43114": {
+            "address": "0xbc78D84Ba0c46dFe32cf2895a19939c86b81a777"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/SolvBTC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x7A9990ffe3057EDC18558cA4C8804430fe917456",
+      "name": "Etherfuse TESOURO",
+      "symbol": "TESOURO",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "etherfuse-tesouro",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x7A9990ffe3057EDC18558cA4C8804430fe917456"
+        },
+        "crossChainAddresses": {
+          "137": {
+            "address": "0xd574b191B5a00262Ff19953d3CE25543AB7C8098"
+          },
+          "8453": {
+            "address": "0x7ceE47e7B7CD04CF984e8Dd86C42595B5771A9B2"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/TESOURO/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x1808D4aA4D4a7cf66bb6515BF126edEfA2b018c1",
+      "name": "USD Star",
+      "symbol": "USD*",
+      "decimals": 6,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "Wormhole NTT",
+          "bridgeAddress": "0x6b838B5eED0Ef683d4Cc5c5aEb7e57272aAF7c2c"
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/USD*/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x111111d2bf19e43C34263401e0CAd979eD1cdb61",
+      "name": "World Liberty Financial USD",
+      "symbol": "USD1",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "usd1-wlfi",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d",
+            "decimals": 18
+          },
+          "56": {
+            "address": "0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d",
+            "decimals": 18
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/USD1/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+      "name": "USDC",
+      "symbol": "USDC",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "usd-coin",
+        "bridgeInfo": {
+          "protocol": "Circle CCTP",
+          "bridgeAddress": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+          },
+          "10": {
+            "address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
+          },
+          "56": {
+            "address": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+            "decimals": 18
+          },
+          "137": {
+            "address": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+          },
+          "999": {
+            "address": "0xb88339CB7199b77E23DB6E890353E22632Ba630f"
+          },
+          "8453": {
+            "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+          },
+          "42161": {
+            "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+          },
+          "43114": {
+            "address": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/USDC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xe7cd86e13AC4309349F30B3435a9d337750fC82D",
+      "name": "USDT0",
+      "symbol": "USDT0",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "usdt0",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x9151434b16b9763660705744891fA906F660EcC5"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "symbol": "USDT"
+          },
+          "10": {
+            "address": "0x01bFF41798a0BcF287b996046Ca68b395DbC1071",
+            "symbol": "USD\u20ae0"
+          },
+          "137": {
+            "address": "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
+          },
+          "999": {
+            "address": "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb",
+            "symbol": "USD\u20ae0"
+          },
+          "9745": {
+            "address": "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb",
+            "symbol": "USDT0"
+          },
+          "42161": {
+            "address": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+            "symbol": "USD\u20ae0"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/USDT0/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x0Bb150DFa86EA5d7742F07FEfCD8E8edA81D64eF",
+      "name": "Saturn USD",
+      "symbol": "USDat",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "saturn-dollar",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x23238f20b894f29041f48D88eE91131C395Aaa71"
+          },
+          "56": {
+            "address": "0x0Bb150DFa86EA5d7742F07FEfCD8E8edA81D64eF"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/USDat/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34",
+      "name": "USDe",
+      "symbol": "USDe",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "ethena-usde",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"
+          },
+          "10": {
+            "address": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34"
+          },
+          "56": {
+            "address": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34"
+          },
+          "999": {
+            "address": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34"
+          },
+          "8453": {
+            "address": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34"
+          },
+          "9745": {
+            "address": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34"
+          },
+          "42161": {
+            "address": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34"
+          },
+          "43114": {
+            "address": "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/USDe/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xBC69212B8E4d445b2307C9D32dD68E2A4Df00115",
+      "name": "Mento Dollar",
+      "symbol": "USDm",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "celo-dollar",
+        "bridgeInfo": {
+          "protocol": "Wormhole NTT",
+          "bridgeAddress": "0xa4096343485a44c0F8d05AE6dA311c18D63e38bC"
+        },
+        "crossChainAddresses": {
+          "137": {
+            "address": "0xBC69212B8E4d445b2307C9D32dD68E2A4Df00115"
+          },
+          "42220": {
+            "address": "0x765DE816845861e75A25fCA122bb6898B8B1282a"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/USDm/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x7ceE47e7B7CD04CF984e8Dd86C42595B5771A9B2",
+      "name": "Etherfuse USTRY",
+      "symbol": "USTRY",
+      "decimals": 6,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x7ceE47e7B7CD04CF984e8Dd86C42595B5771A9B2"
+        },
+        "crossChainAddresses": {
+          "137": {
+            "address": "0xc2C1f8Eb98C0468Be0232DD4166705d0Dea3Fe31"
+          },
+          "8453": {
+            "address": "0xc2C1f8Eb98C0468Be0232DD4166705d0Dea3Fe31"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/USTRY/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c",
+      "name": "Wrapped BTC",
+      "symbol": "WBTC",
+      "decimals": 8,
+      "extensions": {
+        "coinGeckoId": "wrapped-bitcoin",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+          },
+          "10": {
+            "address": "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c"
+          },
+          "56": {
+            "address": "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c"
+          },
+          "8453": {
+            "address": "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c"
+          },
+          "42161": {
+            "address": "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f"
+          },
+          "43114": {
+            "address": "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/WBTC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242",
+      "name": "Wrapped Ether",
+      "symbol": "WETH",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "wormhole-bridged-weth-monad",
+        "bridgeInfo": {
+          "protocol": "Wormhole NTT",
+          "bridgeAddress": "0x36878C6FCa7e0E8a88F90dc410CfBBcA5B695C95"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/WETH/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x29aCC7c504665A5EA95344796f784095f0cfcC58",
+      "name": "Wrapped Frax",
+      "symbol": "WFRAX",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "wrapped-frax",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x29aCC7c504665A5EA95344796f784095f0cfcC58"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x04ACaF8D2865c0714F79da09645C13FD2888977f"
+          },
+          "10": {
+            "address": "0x64445f0aecC51E94aD52d8AC56b7190e764E561a"
+          },
+          "56": {
+            "address": "0x64445f0aecC51E94aD52d8AC56b7190e764E561a"
+          },
+          "137": {
+            "address": "0x64445f0aecC51E94aD52d8AC56b7190e764E561a"
+          },
+          "999": {
+            "address": "0x64445f0aecC51E94aD52d8AC56b7190e764E561a"
+          },
+          "8453": {
+            "address": "0x0CEAC003B0d2479BebeC9f4b2EBAd0a803759bbf"
+          },
+          "42161": {
+            "address": "0x64445f0aecC51E94aD52d8AC56b7190e764E561a"
+          },
+          "43114": {
+            "address": "0x64445f0aecC51E94aD52d8AC56b7190e764E561a"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/WFRAX/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+      "name": "Wrapped MON",
+      "symbol": "WMON",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "wrapped-monad",
+        "bridgeInfo": {
+          "protocol": "Wormhole NTT",
+          "bridgeAddress": "0x36878C6FCa7e0E8a88F90dc410CfBBcA5B695C95"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x6917037F8944201b2648198a89906Edf863B9517"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/WMON/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x01bFF41798a0BcF287b996046Ca68b395DbC1071",
+      "name": "XAUt0",
+      "symbol": "XAUt0",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "tether-gold-tokens",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x21cAef8A43163Eea865baeE23b9C2E327696A3bf"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x68749665FF8D2d112Fa859AA293F07A622782F38",
+            "symbol": "XAUt"
+          },
+          "56": {
+            "address": "0x21cAef8A43163Eea865baeE23b9C2E327696A3bf",
+            "symbol": "XAUt"
+          },
+          "137": {
+            "address": "0xF1815bd50389c46847f0Bda824eC8da914045D14"
+          },
+          "999": {
+            "address": "0xf4D9235269a96aaDaFc9aDAe454a0618eBE37949",
+            "symbol": "XAUt0"
+          },
+          "9745": {
+            "address": "0x1B64B9025EEbb9A6239575dF9Ea4b9Ac46D4d193",
+            "symbol": "XAUt0"
+          },
+          "42161": {
+            "address": "0x40461291347e1eCbb09499F3371D3f17f10d7159"
+          },
+          "42220": {
+            "address": "0xaf37E8B6C9ED7f6318979f56Fc287d76c30847ff"
+          },
+          "43114": {
+            "address": "0x2775d5105276781B4b85bA6eA6a6653bEeD1dd32"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/XAUt0/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x3a2c4aAae6776dC1c31316De559598f2f952E2cB",
+      "name": "Yuzu Money Vault",
+      "symbol": "YZM",
+      "decimals": 6,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/YZM/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x7Cd231120a60F500887444a9bAF5e1BD753A5e59",
+      "name": "Hyperithm Delta Neutral Vault",
+      "symbol": "aHYPER",
+      "decimals": 6,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/aHYPER/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xC6De1DC0B59682bE906E5BcA14E385E74EE88168",
+      "name": "Hyperithm Delta Neutral cbBTC Vault",
+      "symbol": "aHyperBTC",
+      "decimals": 8,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/aHyperBTC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xed5AA9b6eb62298492c7246FE724ee088A760155",
+      "name": "Artificial Financial Intelligence rwaUSDi",
+      "symbol": "afi-rwaUSDi",
+      "decimals": 18,
+      "extensions": {
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xFEE3FBe137cDDcBc479D946EC09596e65e2F29D3"
+          },
+          "8453": {
+            "address": "0xed5AA9b6eb62298492c7246FE724ee088A760155"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/afi-rwaUSDi/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x2ABc42250154752273a4560e875c858623F83ecC",
+      "name": "Agua Global Carry Vault",
+      "symbol": "aguaUSDCgc",
+      "decimals": 18,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x2ABc42250154752273a4560e875c858623F83ecC"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xa98b4A70E17e55045CDE4972B95Bc2E8CEC22a0F"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/aguaUSDCgc/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x0c65A0BC65a5D819235B71F554D210D3F80E0852",
+      "name": "aPriori Monad LST",
+      "symbol": "aprMON",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "apriori-monad-lst",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x93783ccd94763e11B9a57394e63Ddd9CeedaD925"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/aprMON/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x0D9D741FE423Cd5419e4BCb6cB2FfA87AFa93bA4",
+      "name": "avUSD",
+      "symbol": "avUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "avant-usd",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xf4c13D631450De6B12a19829E37c8e2826891dC4"
+          },
+          "8453": {
+            "address": "0x3af90FDA10fc6509DF55e959548B1ed3bc3cFa00"
+          },
+          "43114": {
+            "address": "0x24dE8771bC5DdB3362Db529Fc3358F2df3A0E346"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/avUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xd18B7EC58Cdf4876f6AFebd3Ed1730e4Ce10414b",
+      "name": "Coinbase Wrapped BTC",
+      "symbol": "cbBTC",
+      "decimals": 8,
+      "extensions": {
+        "coinGeckoId": "coinbase-wrapped-btc",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "8453": {
+            "address": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/cbBTC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x9E2679eABFF131b8b1b48fF7566140794E0eEdc4",
+      "name": "ACRDX deRWA",
+      "symbol": "deCRDX",
+      "decimals": 18,
+      "extensions": {
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x9E2679eABFF131b8b1b48fF7566140794E0eEdc4"
+          },
+          "10": {
+            "address": "0x9E2679eABFF131b8b1b48fF7566140794E0eEdc4"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/deCRDX/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x5F8a1C74C112865BD05dbe4752C7608332719062",
+      "name": "JAAA deRWA",
+      "symbol": "deJAAA",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "defi-janus-henderson-anemoy-aaa-clo-fund",
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xAAA0008C8CF3A7Dca931adaF04336A5D808C82Cc"
+          },
+          "8453": {
+            "address": "0xAAA0008C8CF3A7Dca931adaF04336A5D808C82Cc"
+          },
+          "42161": {
+            "address": "0xAAA0008C8CF3A7Dca931adaF04336A5D808C82Cc"
+          },
+          "43114": {
+            "address": "0xAAA0008C8CF3A7Dca931adaF04336A5D808C82Cc"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/deJAAA/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x8DE0F3295B9e42b29E7617BAdA7C603277420451",
+      "name": "JTRSY deRWA",
+      "symbol": "deJTRSY",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "jtrsy-derwa",
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xA6233014B9b7aaa74f38fa1977ffC7A89642dC72"
+          },
+          "42161": {
+            "address": "0xA6233014B9b7aaa74f38fa1977ffC7A89642dC72"
+          },
+          "43114": {
+            "address": "0xA6233014B9b7aaa74f38fa1977ffC7A89642dC72"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/deJTRSY/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xd691b0aFed67F96CEC28Ab6308Cbe5b2C103b7e9",
+      "name": "eBTC",
+      "symbol": "eBTC",
+      "decimals": 10,
+      "extensions": {
+        "coinGeckoId": "ebtc-2"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/eBTC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x103222f020e98Bba0AD9809A011FDF8e6F067496",
+      "name": "earnAUSD",
+      "symbol": "earnAUSD",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "earnausd",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x103222f020e98Bba0AD9809A011FDF8e6F067496"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xa6916b65c5e3fEdf46c0a2F59bff776e872C8992"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/earnAUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xEA7e0955D410C5BA9dAc457539EF0FA53a1399Ed",
+      "name": "earnAUSD Loop",
+      "symbol": "earnAUSDloop",
+      "decimals": 6,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xEA7e0955D410C5BA9dAc457539EF0FA53a1399Ed"
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/earnAUSDloop/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x8FA1365f6E39B7404737721a356B1d4a7b11cA7D",
+      "name": "earnMON",
+      "symbol": "earnMON",
+      "decimals": 18,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/earnMON/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xD7aCB868F97F8286D5d3A0Fd5Ef112a8a72eCD90",
+      "name": "Lorenzo Wrapped Bitcoin",
+      "symbol": "enzoBTC",
+      "decimals": 8,
+      "extensions": {
+        "coinGeckoId": "lorenzo-wrapped-bitcoin",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xaa0D222436152050501E91DC07A45b1112f8b60f"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x6A9A65B84843F5fD4aC9a0471C4fc11AFfFBce4a"
+          },
+          "56": {
+            "address": "0x6A9A65B84843F5fD4aC9a0471C4fc11AFfFBce4a"
+          },
+          "8453": {
+            "address": "0x6A9A65B84843F5fD4aC9a0471C4fc11AFfFBce4a"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/enzoBTC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x2416092f143378750bb29b79eD961ab195CcEea5",
+      "name": "Renzo Restaked ETH",
+      "symbol": "ezETH",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "renzo-restaked-eth",
+        "bridgeInfo": {
+          "protocol": "Hyperlane Warp Route",
+          "bridgeAddress": "0x7A911b0bD4F067FB8DAFF734A78E7A72865100d8"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xbf5495Efe5DB9ce00f80364C8B423567e58d2110"
+          },
+          "10": {
+            "address": "0x2416092f143378750bb29b79eD961ab195CcEea5"
+          },
+          "56": {
+            "address": "0x2416092f143378750bb29b79eD961ab195CcEea5"
+          },
+          "8453": {
+            "address": "0x2416092f143378750bb29b79eD961ab195CcEea5"
+          },
+          "9745": {
+            "address": "0x2416092f143378750bb29b79eD961ab195CcEea5"
+          },
+          "42161": {
+            "address": "0x2416092f143378750bb29b79eD961ab195CcEea5"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/ezETH/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x288F9D76019469bfEb56BB77d86aFa2bF563B75B",
+      "name": "Frax Ether",
+      "symbol": "frxETH",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "frax-ether",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x288F9D76019469bfEb56BB77d86aFa2bF563B75B"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x5E8422345238F34275888049021821E8E08CAa1f"
+          },
+          "10": {
+            "address": "0x43eDD7f3831b08FE70B7555ddD373C8bF65a9050"
+          },
+          "56": {
+            "address": "0x43eDD7f3831b08FE70B7555ddD373C8bF65a9050"
+          },
+          "137": {
+            "address": "0x43eDD7f3831b08FE70B7555ddD373C8bF65a9050"
+          },
+          "999": {
+            "address": "0x43eDD7f3831b08FE70B7555ddD373C8bF65a9050"
+          },
+          "8453": {
+            "address": "0x7eb8d1E4E2D0C8b9bEDA7a97b305cF49F3eeE8dA"
+          },
+          "42161": {
+            "address": "0x43eDD7f3831b08FE70B7555ddD373C8bF65a9050"
+          },
+          "43114": {
+            "address": "0x43eDD7f3831b08FE70B7555ddD373C8bF65a9050"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/frxETH/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x58E3ee6accd124642dDB5d3f91928816Be8D8ed3",
+      "name": "Frax USD",
+      "symbol": "frxUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "frax-usd",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x58E3ee6accd124642dDB5d3f91928816Be8D8ed3"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29"
+          },
+          "10": {
+            "address": "0x80Eede496655FB9047dd39d9f418d5483ED600df"
+          },
+          "56": {
+            "address": "0x80Eede496655FB9047dd39d9f418d5483ED600df"
+          },
+          "137": {
+            "address": "0x80Eede496655FB9047dd39d9f418d5483ED600df"
+          },
+          "999": {
+            "address": "0x80Eede496655FB9047dd39d9f418d5483ED600df"
+          },
+          "8453": {
+            "address": "0xe5020A6d073a794B6E7f05678707dE47986Fb0b6"
+          },
+          "42161": {
+            "address": "0x80Eede496655FB9047dd39d9f418d5483ED600df"
+          },
+          "43114": {
+            "address": "0x80Eede496655FB9047dd39d9f418d5483ED600df"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/frxUSD/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x0143C3eF3a76Ed825Fd5201953f65b52aCEfD799",
+      "name": "K3 x Galaxy Lending",
+      "symbol": "gAUSD",
+      "decimals": 6,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/gAUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x8498312A6B3CbD158bf0c93AbdCF29E6e4F55081",
+      "name": "gMON",
+      "symbol": "gMON",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "magma-staked-monad"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/gMON/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xaD663aC84052b52BE4ed1b27BA416505e84a00Bf",
+      "name": "High Yield AUSD Vault",
+      "symbol": "hyAUSD",
+      "decimals": 6,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/hyAUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x5ec32e3f2Cc925296DC37eDf3B2388868D5525C5",
+      "name": "jrUSDat",
+      "symbol": "jrUSDat",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "strata-junior-usdat",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x5ec32e3f2Cc925296DC37eDf3B2388868D5525C5"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x011e55d2b28306458e37Ca7E997C879BB25A455D"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/jrUSDat/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x9c82eB49B51F7Dc61e22Ff347931CA32aDc6cd90",
+      "name": "Locked AZND",
+      "symbol": "loAZND",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "mu-digital-locked-aznd"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/loAZND/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x1c8eE940B654bFCeD403f2A44C1603d5be0F50Fa",
+      "name": "Midas mEDGE",
+      "symbol": "mEDGE",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "midas-medge"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/mEDGE/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xd90F6bFEd23fFDE40106FC4498DD2e9EDB95E4e7",
+      "name": "Midas Hyperithm",
+      "symbol": "mHYPER",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "midas-mhyper",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x08BC5Ef2E2Afe697614bf3A9eaA71dcBb577f2Df"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x9b5528528656DBC094765E2abB79F293c21191B9"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/mHYPER/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xF7Cf282eC810fDed974F99c0163E792f432892BC",
+      "name": "Midas Hyperithm BTC",
+      "symbol": "mHyperBTC",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "midas-hyperithm-btc",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xe9977b9B22Ed2C19DCd68D0403163EFcd45bF874"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xC8495EAFf71D3A563b906295fCF2f685b1783085"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/mHyperBTC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x6CF55183eA297ba200Cf88419Bba156EBA2Ed206",
+      "name": "Midas Rockaway Market Neutral",
+      "symbol": "mROX",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "midas-rockaway-market-neutral",
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x67E1F506B148d0Fc95a4E3fFb49068ceB6855c05"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/mROX/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xacA92E438df0B2401fF60dA7E4337B687a2435DA",
+      "name": "MetaMask USD",
+      "symbol": "mUSD",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "metamask-usd",
+        "bridgeInfo": {
+          "protocol": "M0 Portal",
+          "bridgeAddress": "0xD925C84b55E4e44a53749fF5F2a5A13F63D128fd"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xacA92E438df0B2401fF60dA7E4337B687a2435DA"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/mUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x1D4795A4670033f47f572b910553be0295077b51",
+      "name": "mcMON",
+      "symbol": "mcMON",
+      "decimals": 18,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/mcMON/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x336D414754967C6682B5A665C7DAF6F1409E63e8",
+      "name": "mu Bond",
+      "symbol": "muBOND",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "mu-digital-mubond"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/muBOND/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x58ba69b289De313E66A13B7D1F822Fc98b970554",
+      "name": "sUSN Delta Neutral Yield Vault",
+      "symbol": "naccUSDC",
+      "decimals": 6,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/naccUSDC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x37D6382B6889cCeF8d6871A8b60E667115eDDBcF",
+      "name": "pufETH",
+      "symbol": "pufETH",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "pufeth",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x37D6382B6889cCeF8d6871A8b60E667115eDDBcF"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xD9A442856C234a39a81a089C06451EBAa4306a72"
+          },
+          "999": {
+            "address": "0x87d00066cf131ff54B72B134a217D5401E5392b6"
+          },
+          "8453": {
+            "address": "0x30D91DF53cCCf07e3a5BF6862Db8CFBe1fCB21d3"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/pufETH/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0xC50f2e735eDd9dCD8Ccd41EcFE9894E679e3195f",
+      "name": "Rocket Pool ETH",
+      "symbol": "rETH",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "rocket-pool-eth",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xae78736Cd615f374D3085123A210448E74Fc6393"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/rETH/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x09D4214C03D01F49544C0448DBE3A27f768F2b34",
+      "name": "Reservoir Stablecoin",
+      "symbol": "rUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "reservoir-rusd",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x09D4214C03D01F49544C0448DBE3A27f768F2b34"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x09D4214C03D01F49544C0448DBE3A27f768F2b34"
+          },
+          "56": {
+            "address": "0x09D4214C03D01F49544C0448DBE3A27f768F2b34"
+          },
+          "999": {
+            "address": "0x866d66F64FB81461903E1e38d998E747EcF35E78"
+          },
+          "8453": {
+            "address": "0x09D4214C03D01F49544C0448DBE3A27f768F2b34"
+          },
+          "9745": {
+            "address": "0x09D4214C03D01F49544C0448DBE3A27f768F2b34"
+          },
+          "42161": {
+            "address": "0x09D4214C03D01F49544C0448DBE3A27f768F2b34"
+          },
+          "43114": {
+            "address": "0x09D4214C03D01F49544C0448DBE3A27f768F2b34"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/rUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xD25f563e12FF616262F8c947feC108db934F8059",
+      "name": "Re Protocol reUSD",
+      "symbol": "reUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "re-protocol-reusd",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x5086bf358635B81D8C47C66d1C8b9E567Db70c72"
+          },
+          "56": {
+            "address": "0xbA9425EC55ee0E72216D18e0ad8BBbA2553bFb60"
+          },
+          "8453": {
+            "address": "0x7D214438D0F27AfCcC23B3d1e1a53906aCE5CFEa"
+          },
+          "9745": {
+            "address": "0xe08853433fDBC504240455e295B644E0F44c3B29"
+          },
+          "42161": {
+            "address": "0x76cE01F0Ef25AA66cC5F1E546a005e4A63B25609"
+          },
+          "43114": {
+            "address": "0x180aF87b47Bf272B2df59dccf2D76a6eaFa625Bf"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/reUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x9aBb5aaAA4c63ABee1b6617843fd818c99C52c69",
+      "name": "Real World Asset USD",
+      "symbol": "rwaUSD",
+      "decimals": 18,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x8Fcd23142047A3073ed332a0Ed07d1e8D2BD5177"
+          },
+          "8453": {
+            "address": "0x272Ec977f4575df41cD47b1b254954E1C7972789"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/rwaUSD/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x650b616b46fF94000Eb115926aB8393B90788D76",
+      "name": "rwaUSDi",
+      "symbol": "rwaUSDi",
+      "decimals": 6,
+      "extensions": {
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xA39986F96B80d04e8d7AeAaF47175F47C23FD0f4"
+          },
+          "8453": {
+            "address": "0xd74FB32112b1eF5b4C428Fead8dA8d85A0019009"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/rwaUSDi/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0xD793c04B87386A6bb84ee61D98e0065FdE7fdA5E",
+      "name": "sAUSD",
+      "symbol": "sAUSD",
+      "decimals": 6,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/sAUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x61b29EfEf2E6f866bA4AaeFDb87d2837C6a22b9c",
+      "name": "Staked LVMON",
+      "symbol": "sLVMON",
+      "decimals": 18,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/sLVMON/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xA3227C5969757783154C60bF0bC1944180ed81B9",
+      "name": "Kintsu Staked Monad",
+      "symbol": "sMON",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "kintsu-staked-monad"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/sMON/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x9cd57D3685E6868caCaA8BDCaAf52CBdEBf4fA25",
+      "name": "Staked Saturn USD",
+      "symbol": "sUSDat",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "saturn-susdat",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+          },
+          "56": {
+            "address": "0x9cd57D3685E6868caCaA8BDCaAf52CBdEBf4fA25"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/sUSDat/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2",
+      "name": "Staked USDe",
+      "symbol": "sUSDe",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "ethena-staked-usde",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497"
+          },
+          "10": {
+            "address": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2"
+          },
+          "56": {
+            "address": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2"
+          },
+          "999": {
+            "address": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2"
+          },
+          "8453": {
+            "address": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2"
+          },
+          "9745": {
+            "address": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2"
+          },
+          "42161": {
+            "address": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2"
+          },
+          "43114": {
+            "address": "0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/sUSDe/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x9648dB94F1e6B19e7D755585542981F97dc806c6",
+      "name": "Staked avUSD",
+      "symbol": "savUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "avant-staked-usd",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xb8D89678E75a973E74698c976716308abB8a46A4"
+          },
+          "56": {
+            "address": "0x14063733875204b35D20D5Fc52C7B5569aD00335"
+          },
+          "8453": {
+            "address": "0xa6EF20FE18CD529cA15A8a53A29D1832B1F848ff"
+          },
+          "9745": {
+            "address": "0xA29420057F3e3B9512D4786df135Da1674BD74D4"
+          },
+          "42161": {
+            "address": "0xA322e23a357cB7C596A7a834102B9d6d5b15da3e"
+          },
+          "43114": {
+            "address": "0x06d47F3fb376649c3A9Dafe069B3D6E35572219E"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/savUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x3B4cf37A3335F21c945a40088404c715525fCb29",
+      "name": "Staked Frax Ether",
+      "symbol": "sfrxETH",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "staked-frax-ether",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x3B4cf37A3335F21c945a40088404c715525fCb29"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xac3E018457B222d93114458476f3E3416Abbe38F"
+          },
+          "10": {
+            "address": "0x3Ec3849C33291a9eF4c5dB86De593EB4A37fDe45"
+          },
+          "56": {
+            "address": "0x3Ec3849C33291a9eF4c5dB86De593EB4A37fDe45"
+          },
+          "137": {
+            "address": "0x3Ec3849C33291a9eF4c5dB86De593EB4A37fDe45"
+          },
+          "999": {
+            "address": "0x3Ec3849C33291a9eF4c5dB86De593EB4A37fDe45"
+          },
+          "8453": {
+            "address": "0x192e0C7Cc9B263D93fa6d472De47bBefe1Fb12bA"
+          },
+          "42161": {
+            "address": "0x3Ec3849C33291a9eF4c5dB86De593EB4A37fDe45"
+          },
+          "43114": {
+            "address": "0x3Ec3849C33291a9eF4c5dB86De593EB4A37fDe45"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/sfrxETH/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x137643F7b2C189173867b3391f6629caB46F0F1a",
+      "name": "Staked Frax USD",
+      "symbol": "sfrxUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "staked-frax-usd",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x137643F7b2C189173867b3391f6629caB46F0F1a"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xcf62F905562626CfcDD2261162a51fd02Fc9c5b6"
+          },
+          "10": {
+            "address": "0x5Bff88cA1442c2496f7E475E9e7786383Bc070c0"
+          },
+          "56": {
+            "address": "0x5Bff88cA1442c2496f7E475E9e7786383Bc070c0"
+          },
+          "137": {
+            "address": "0x5Bff88cA1442c2496f7E475E9e7786383Bc070c0"
+          },
+          "999": {
+            "address": "0x5Bff88cA1442c2496f7E475E9e7786383Bc070c0"
+          },
+          "8453": {
+            "address": "0x91A3f8a8d7a881fBDfcfEcd7A2Dc92a46DCfa14e"
+          },
+          "42161": {
+            "address": "0x5Bff88cA1442c2496f7E475E9e7786383Bc070c0"
+          },
+          "43114": {
+            "address": "0x5Bff88cA1442c2496f7E475E9e7786383Bc070c0"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/sfrxUSD/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x1B68626dCa36c7fE922fD2d55E4f631d962dE19c",
+      "name": "ShMonad",
+      "symbol": "shMON",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "shmonad"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/shMON/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x17B8F7373ECd556192AbFc85be314e5d4Fb6b3FA",
+      "name": "srUSDat",
+      "symbol": "srUSDat",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "strata-senior-usdat",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x17B8F7373ECd556192AbFc85be314e5d4Fb6b3FA"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xFaa9a0e1Db9E22AE3A20B2B58a68DC24D053d066"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/srUSDat/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x683fb58ee77172626D5B49087DdAc71eF7825d20",
+      "name": "Staked trUSD",
+      "symbol": "strUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "tori-staked-trusd",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x280839980a7eD0D7717F64125fE241012E5F5815"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/strUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xe85411C030fB32A9D8b14Bbbc6CB19417391F711",
+      "name": "Sumerian BTC",
+      "symbol": "suBTC",
+      "decimals": 18,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/suBTC/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x1c22531AA9747d76fFF8F0A43b37954ca67d28e0",
+      "name": "Sumerian ETH",
+      "symbol": "suETH",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "sumer-money-sueth"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/suETH/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0x8BF591Eae535f93a242D5A954d3Cde648b48A5A8",
+      "name": "Sumerian USD",
+      "symbol": "suUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "sumer-money-suusd"
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/suUSD/logo.png"
+    },
+    {
+      "chainId": 143,
+      "address": "0xaB6e5a0C3799d020c790D34F7B2C02639e238AF7",
+      "name": "Syrup USDC",
+      "symbol": "syrupUSDC",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "syrupusdc",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x80ac24aA929eaF5013f6436cdA2a7ba190f5Cc0b"
+          },
+          "8453": {
+            "address": "0x660975730059246A68521a3e2FBD4740173100f5"
+          },
+          "42161": {
+            "address": "0x41CA7586cC1311807B4605fBB748a3B8862b42b5"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/syrupUSDC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x484be0540aD49f351eaa04eeB35dF0f937D4E73f",
+      "name": "Staked Yuzu USD",
+      "symbol": "syzUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "staked-yuzu-usd",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x484be0540aD49f351eaa04eeB35dF0f937D4E73f"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x6DFF69eb720986E98Bb3E8b26cb9E02Ec1a35D12"
+          },
+          "9745": {
+            "address": "0xC8A8DF9B210243c55D31c73090F06787aD0A1Bf6"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/syzUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xfDD22Ce6D1F66bc0Ec89b20BF16CcB6670F55A5a",
+      "name": "thBILL",
+      "symbol": "thBILL",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "theo-short-duration-us-treasury-fund",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xfDD22Ce6D1F66bc0Ec89b20BF16CcB6670F55A5a"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x5FA487BCa6158c64046B2813623e20755091DA0b"
+          },
+          "999": {
+            "address": "0xfDD22Ce6D1F66bc0Ec89b20BF16CcB6670F55A5a"
+          },
+          "8453": {
+            "address": "0xfDD22Ce6D1F66bc0Ec89b20BF16CcB6670F55A5a"
+          },
+          "42161": {
+            "address": "0xfDD22Ce6D1F66bc0Ec89b20BF16CcB6670F55A5a"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/thBILL/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x770a579Ea200784723B31b8668b0773ba80393c9",
+      "name": "trUSD",
+      "symbol": "trUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "tori-trusd",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xd0580192E98eA6CEB9c7b6191Ed2E27560911697"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/trUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x8d3F9f9Eb2f5E8B48EFBB4074440D1E2A34Bc365",
+      "name": "RWA Backed Lending by Valos",
+      "symbol": "vUSD",
+      "decimals": 6,
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/vUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x437cc33344a0B27A429f795ff6B469C72698B291",
+      "name": "WrappedM by M0",
+      "symbol": "wM",
+      "decimals": 6,
+      "extensions": {
+        "coinGeckoId": "wrappedm-by-m0",
+        "bridgeInfo": {
+          "protocol": "M0 Portal",
+          "bridgeAddress": "0xD925C84b55E4e44a53749fF5F2a5A13F63D128fd"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x437cc33344a0B27A429f795ff6B469C72698B291"
+          },
+          "10": {
+            "address": "0x437cc33344a0B27A429f795ff6B469C72698B291"
+          },
+          "56": {
+            "address": "0x437cc33344a0B27A429f795ff6B469C72698B291"
+          },
+          "999": {
+            "address": "0x437cc33344a0B27A429f795ff6B469C72698B291"
+          },
+          "8453": {
+            "address": "0x437cc33344a0B27A429f795ff6B469C72698B291"
+          },
+          "9745": {
+            "address": "0x437cc33344a0B27A429f795ff6B469C72698B291"
+          },
+          "42161": {
+            "address": "0x437cc33344a0B27A429f795ff6B469C72698B291"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/wM/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xA3D68b74bF0528fdD07263c60d6488749044914b",
+      "name": "Wrapped eETH",
+      "symbol": "weETH",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "wrapped-eeth",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xA3D68b74bF0528fdD07263c60d6488749044914b"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"
+          },
+          "10": {
+            "address": "0x5A7fACB970D094B6C7FF1df0eA68D99E6e73CBFF"
+          },
+          "56": {
+            "address": "0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A"
+          },
+          "999": {
+            "address": "0xA3D68b74bF0528fdD07263c60d6488749044914b"
+          },
+          "8453": {
+            "address": "0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A"
+          },
+          "9745": {
+            "address": "0xA3D68b74bF0528fdD07263c60d6488749044914b"
+          },
+          "42161": {
+            "address": "0x35751007a407ca6FEFfE80b3cB397736D2cf4dbe"
+          },
+          "43114": {
+            "address": "0xA3D68b74bF0528fdD07263c60d6488749044914b"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/weETH/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x4809010926aec940b550D34a46A52739f996D75D",
+      "name": "Wrapped Savings rUSD",
+      "symbol": "wsrUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "wrapped-savings-rusd",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x4809010926aec940b550D34a46A52739f996D75D"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xd3fD63209FA2D55B07A0f6db36C2f43900be3094"
+          },
+          "56": {
+            "address": "0x4809010926aec940b550D34a46A52739f996D75D"
+          },
+          "999": {
+            "address": "0x04716DB62C085D9e08050fcF6F7D775A03d07720"
+          },
+          "8453": {
+            "address": "0x62344be8CA1c339B46274a4017dd87AF436900B1"
+          },
+          "9745": {
+            "address": "0x4809010926aec940b550D34a46A52739f996D75D"
+          },
+          "42161": {
+            "address": "0x4809010926aec940b550D34a46A52739f996D75D"
+          },
+          "43114": {
+            "address": "0x4809010926aec940b550D34a46A52739f996D75D"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/wsrUSD/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x10Aeaf63194db8d453d4D85a06E5eFE1dd0b5417",
+      "name": "Wrapped liquid staked Ether 2.0",
+      "symbol": "wstETH",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "wrapped-steth",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+          },
+          "9745": {
+            "address": "0x481e638105407Be40c2f2E2e006DE272d05930d0"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/wstETH/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xc99F5c922DAE05B6e2ff83463ce705eF7C91F077",
+      "name": "xSolvBTC",
+      "symbol": "xSolvBTC",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "solv-protocol-solvbtc-bbn",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xd9D920AA40f578ab794426F5C90F6C731D159DEf"
+          },
+          "56": {
+            "address": "0x1346b618dC92810EC74163e4c27004c921D446a5"
+          },
+          "137": {
+            "address": "0xc99F5c922DAE05B6e2ff83463ce705eF7C91F077"
+          },
+          "999": {
+            "address": "0xc99F5c922DAE05B6e2ff83463ce705eF7C91F077"
+          },
+          "8453": {
+            "address": "0xC26C9099BD3789107888c35bb41178079B282561"
+          },
+          "42161": {
+            "address": "0x346c574C56e1A4aAa8dc88Cda8F7EB12b39947aB"
+          },
+          "43114": {
+            "address": "0xCC0966D8418d412c599A6421b760a847eB169A8c"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/xSolvBTC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xd74FB32112b1eF5b4C428Fead8dA8d85A0019009",
+      "name": "xUSDC",
+      "symbol": "xUSDC",
+      "decimals": 6,
+      "extensions": {
+        "crossChainAddresses": {
+          "43114": {
+            "address": "0xCF0Eb4ac018C06a16ED5c63484823C7805e7599D"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/xUSDC/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xb37476cB1F6111cC682b107B747b8652f90B0984",
+      "name": "Yuzu Protection Pool",
+      "symbol": "yzPP",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "yuzu-protection-pool",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0xb37476cB1F6111cC682b107B747b8652f90B0984"
+        },
+        "crossChainAddresses": {
+          "9745": {
+            "address": "0xEbFC8C2Fe73C431Ef2A371AeA9132110aaB50DCa"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/yzPP/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0xc9ea90692757831d98Ac629F2A0140E02b80A7DA",
+      "name": "Yuzu Prime",
+      "symbol": "yzPrime",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "yuzu-prime",
+        "bridgeInfo": {
+          "protocol": "Chainlink CCIP",
+          "bridgeAddress": "0x33566fE5976AAa420F3d5C64996641Fc3858CaDB"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0xeA14a0f64412Af9a411A7e8543913376337c0E06"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/yzPrime/logo.svg"
+    },
+    {
+      "chainId": 143,
+      "address": "0x9dcB0D17eDDE04D27F387c89fECb78654C373858",
+      "name": "Yuzu USD",
+      "symbol": "yzUSD",
+      "decimals": 18,
+      "extensions": {
+        "coinGeckoId": "yuzu-usd",
+        "bridgeInfo": {
+          "protocol": "LayerZero OFT",
+          "bridgeAddress": "0x9dcB0D17eDDE04D27F387c89fECb78654C373858"
+        },
+        "crossChainAddresses": {
+          "1": {
+            "address": "0x387167e5C088468906Bcd67C06746409a8E44abA"
+          },
+          "9745": {
+            "address": "0x6695c0f8706C5ACe3Bdf8995073179cCA47926dc"
+          }
+        }
+      },
+      "logoURI": "https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/mainnet/yzUSD/logo.svg"
+    }
+  ],
+  "version": {
+    "major": 2,
+    "minor": 49,
+    "patch": 0
+  }
+}
