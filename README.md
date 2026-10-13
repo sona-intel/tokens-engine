@@ -5,7 +5,8 @@ Sona's token data for token pages on Ethereum (`eip155:1`) and Monad (`eip155:14
 - what it is: name, symbol, decimals and total supply, read from the contract;
 - what it is worth: price, fully diluted value and the market cap a provider reports;
 - who holds it: holder count, the share of the top 10 holders, and the holder list, largest first;
-- what moved: the largest transfers of a recent window.
+- what moved: the largest transfers of a recent window;
+- how to find it: a search by symbol or name, with the tokens on curated lists first, and a logo for each token.
 
 [`RULES.md`](RULES.md) says how every number is made and where it falls short.
 
@@ -20,7 +21,8 @@ The engine only reads. It holds no wallet or private key and signs nothing. Its 
 | JSON-RPC (in the Sona stack the RPC router, `http://rpc-router:4000/sona/{ethereum,monad}`) | `name`, `symbol`, `decimals` and `totalSupply` in one Multicall3 `aggregate3` call, `balanceOf` batches for the Monad index, block times. Every request carries `X-ERPC-Use-Upstream: !drpc-*`, so the router never uses its paid dRPC upstreams, and the engine counts any call the router still billed |
 | Sona's prices service (`http://prices:8080`) | the current price, from its 1-day chart |
 | Blockscout (`eth.blockscout.com`, keyless, at most 3 requests a second) | Ethereum: holder count, circulating market cap, holder pages |
-| GeckoTerminal (`api.geckoterminal.com`, keyless, at most 20 requests a minute) | Monad: holder count, top 10 share, market cap |
+| GeckoTerminal (`api.geckoterminal.com`, keyless, at most 20 requests a minute) | Monad: holder count, top 10 share, market cap, logo. Both chains: the pool search behind the token search |
+| Curated token lists (Uniswap default list at `tokens.uniswap.org`, the Monad Foundation's `monad-crypto/token-list` on GitHub, keyless, read on start and daily) | verified tokens of the search and the first choice of `logo_url` |
 | Envio HyperSync (`ENVIO_HYPERSYNC_KEY`) | Ethereum: the transfer window of a token. Monad: the backfill and the tail of the holder index |
 | Postgres | the Monad index: indexed tokens, current balances, the largest transfers of each day of the last 7 |
 
@@ -39,6 +41,7 @@ Internal only. `sona-api` is the public face. The full contract is [`openapi.yam
 | `GET /internal/v1/chains/{chain}/tokens/{token}` | `token_info`: name, symbol, decimals, total supply, price, FDV, market cap, holder count, top 10 share, sources, coverage |
 | `GET .../tokens/{token}/holders?limit=&cursor=` | `token_holders`: holders largest first with balance and share, `next_cursor`, holder count, source, and the Monad `index` state |
 | `GET .../tokens/{token}/transfers?limit=` | `token_transfers`: the largest transfers of the window, with the window's blocks and times |
+| `GET /internal/v1/tokens/search?q=&limit=` | `token_search`: tokens of both chains whose symbol or name matches `q`, curated tokens first (`verified: true`), the rest by pool liquidity, each with its logo |
 | `GET /internal/v1/status` | chains, paid RPC calls, HyperSync use, and every indexed Monad token with its state, mode, blocks and backfill cost |
 | `GET /healthz`, `GET /readyz` | liveness, and readiness (the database answers) |
 
@@ -46,7 +49,7 @@ An address that answers neither `decimals()` nor `totalSupply()` is no token and
 
 ## Configuration
 
-`config/engine.yaml` holds the chains (CAIP-2 id, RPC and HyperSync URLs, where holders come from, the wrapped native coin), the source URLs and rates, the cache times, the Ethereum transfer window and the index settings (`max_tokens` 50, `backfill_budget` 120 requests, `activity_window_blocks` 20,000, `tail_interval` 60 s, `lag_blocks` 10, `window_days` 7, `top_per_day` 100, `prewarm` USDC and WMON). It is validated on start, and a key it does not know is an error. Settings from the environment (names in `.env.example`):
+`config/engine.yaml` holds the chains (CAIP-2 id, RPC and HyperSync URLs, GeckoTerminal network, where holders come from, the wrapped native coin), the curated token lists and their refresh time, the source URLs and rates, the cache times, the Ethereum transfer window and the index settings (`max_tokens` 50, `backfill_budget` 120 requests, `activity_window_blocks` 20,000, `tail_interval` 60 s, `lag_blocks` 10, `window_days` 7, `top_per_day` 100, `prewarm` USDC and WMON). It is validated on start, and a key it does not know is an error. Settings from the environment (names in `.env.example`):
 
 | Variable | Use |
 |---|---|
@@ -96,11 +99,11 @@ Tests need no network. The ones that need Postgres skip unless `TOKENS_TEST_PG` 
 | `internal/config` | `engine.yaml` and environment, with the key redacted |
 | `internal/evm` | addresses, ERC-20 selectors and topics, Multicall3 encode and decode |
 | `internal/rpc` | JSON-RPC client with retries, the upstream filter header and a paid-call count |
-| `internal/sources` | Blockscout, GeckoTerminal, prices and HyperSync clients, the pacer |
+| `internal/sources` | Blockscout, GeckoTerminal, token list, prices and HyperSync clients, the pacer |
 | `internal/cache` | in-memory answers with expiry, one fetch per key at a time |
 | `internal/index` | the Monad index: decoding, backfill, mode switch and tail |
 | `internal/store`, `migrations` | Postgres access and embedded SQL |
-| `internal/tokens` | the token records |
+| `internal/tokens` | the token records, the curated lists and the search |
 | `internal/server` | HTTP handlers, parameters, problem mapping, metrics |
 | `internal/app` | wiring for `main` |
 | `internal/problem` | problem+json writer |

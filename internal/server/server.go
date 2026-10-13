@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -31,6 +33,11 @@ const (
 	statusClientClosed = 499
 	prefix             = "/internal/v1/chains/{chain}/tokens/{token}"
 
+	searchPath      = "/internal/v1/tokens/search"
+	defaultSearch   = 8
+	maxSearch       = 20
+	minQuery        = 2
+	maxQuery        = 64
 	defaultLimit    = 25
 	maxLimit        = 100
 	maxCursor       = 512
@@ -50,6 +57,7 @@ type Service interface {
 	Info(ctx context.Context, chain string, token evm.Address) (tokens.Info, error)
 	Holders(ctx context.Context, chain string, token evm.Address, limit int, cursor string) (tokens.Holders, error)
 	Transfers(ctx context.Context, chain string, token evm.Address, limit int) (tokens.Transfers, error)
+	Search(ctx context.Context, q string, limit int) (tokens.Search, error)
 	Status(ctx context.Context) (tokens.Status, error)
 	Ready(ctx context.Context) bool
 }
@@ -79,6 +87,7 @@ func New(svc Service, m *Metrics) http.Handler {
 	for _, rt := range routes {
 		mux.HandleFunc(rt.pattern, a.serve(rt.handler(a), true))
 	}
+	mux.HandleFunc("GET "+searchPath, a.serve(a.search(), false))
 	mux.HandleFunc("GET /internal/v1/status", a.serve(a.status(), false))
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		problem.Write(w, problem.New(problem.CodeNotFound, "No such route.", req.URL.EscapedPath()))
@@ -257,6 +266,24 @@ func (a *app) transfers() endpoint {
 			return nil, err
 		}
 		return a.svc.Transfers(c.ctx, c.chain, c.token, limit)
+	}
+}
+
+func (a *app) search() endpoint {
+	return func(c *call) (any, error) {
+		q, err := parseQuery(c.req, "q", "limit")
+		if err != nil {
+			return nil, err
+		}
+		term := strings.ToLower(strings.TrimSpace(q.Get("q")))
+		if n := utf8.RuneCountInString(term); n < minQuery || n > maxQuery || strings.ContainsFunc(term, unicode.IsControl) {
+			return nil, invalid("q is 2 to 64 characters once trimmed.")
+		}
+		limit, err := intParam(q, "limit", defaultSearch, 1, maxSearch)
+		if err != nil {
+			return nil, err
+		}
+		return a.svc.Search(c.ctx, term, limit)
 	}
 }
 

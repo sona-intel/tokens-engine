@@ -64,6 +64,13 @@ func (s *svc) Transfers(ctx context.Context, chain string, token evm.Address, li
 	return s.Service.Transfers(ctx, chain, token, limit)
 }
 
+func (s *svc) Search(ctx context.Context, q string, limit int) (tokens.Search, error) {
+	if s.fail != nil {
+		return tokens.Search{}, s.fail
+	}
+	return s.Service.Search(ctx, q, limit)
+}
+
 func (s *svc) Status(ctx context.Context) (tokens.Status, error) {
 	if s.fail != nil {
 		return tokens.Status{}, s.fail
@@ -73,7 +80,12 @@ func (s *svc) Status(ctx context.Context) (tokens.Status, error) {
 
 func newSvc(t *testing.T, mutate func(*svc)) http.Handler {
 	t.Helper()
-	service, f := fixture.Service(t)
+	return newSvcWith(t, fixture.Service, mutate)
+}
+
+func newSvcWith(t *testing.T, build func(testing.TB) (*tokens.Service, *fixture.Fakes), mutate func(*svc)) http.Handler {
+	t.Helper()
+	service, f := build(t)
 	s := &svc{Service: service, f: f, ready: true}
 	if mutate != nil {
 		mutate(s)
@@ -89,6 +101,8 @@ type specCase struct {
 	malformed  bool
 	gone       bool
 	mutate     func(*svc)
+	// listsFailed serves a service whose curated lists could not load on start
+	listsFailed bool
 }
 
 var (
@@ -99,6 +113,7 @@ var (
 	monUSDC  = fixture.MonUSDC.String()
 	monWMON  = fixture.MonWMON.String()
 	eoa      = fixture.EthEOA.String()
+	search   = "/internal/v1/tokens/search"
 	failWith = func(err error) func(*svc) { return func(s *svc) { s.fail = err } }
 )
 
@@ -121,6 +136,15 @@ func cases() []specCase {
 		{name: "transfers on Ethereum", path: eth + mkr + "/transfers?limit=3"},
 		{name: "transfers on Monad", path: mon + monUSDC + "/transfers"},
 		{name: "transfers on Monad of a queued token", path: mon + monWMON + "/transfers?limit=100"},
+		{name: "info of MKR with a logo from Blockscout", path: eth + mkr},
+		{name: "search for usdc", path: search + "?q=usdc"},
+		{name: "search for mon", path: search + "?q=mon&limit=5"},
+		{name: "search for wmon", path: search + "?q=wmon&limit=20"},
+		{name: "search for pepe", path: search + "?q=pepe&limit=3"},
+		{name: "search with spaces and capitals", path: search + "?q=%20USDC%20"},
+		{name: "search that matches nothing", path: search + "?q=zz"},
+		{name: "search with GeckoTerminal down", path: search + "?q=usdc", mutate: func(s *svc) { s.f.GeckoDown = true }},
+		{name: "search with the curated lists unavailable", path: search + "?q=usdc", listsFailed: true},
 
 		{name: "limit zero", path: eth + usdc + "/holders?limit=0", status: http.StatusBadRequest, malformed: true},
 		{name: "limit 101", path: mon + monUSDC + "/transfers?limit=101", status: http.StatusBadRequest, malformed: true},
@@ -128,6 +152,15 @@ func cases() []specCase {
 		{name: "cursor this engine did not make", path: eth + usdc + "/holders?cursor=eyJ4IjoxfQ", status: http.StatusBadRequest},
 		{name: "unknown parameter", path: eth + usdc + "?foo=1", status: http.StatusBadRequest},
 		{name: "repeated parameter", path: eth + usdc + "/holders?limit=1&limit=2", status: http.StatusBadRequest},
+		{name: "search with one character", path: search + "?q=z", status: http.StatusBadRequest, malformed: true},
+		{name: "search with only spaces", path: search + "?q=%20%20%20", status: http.StatusBadRequest},
+		{name: "search with 65 characters", path: search + "?q=" + strings.Repeat("a", 65), status: http.StatusBadRequest, malformed: true},
+		{name: "search without q", path: search, status: http.StatusBadRequest, malformed: true},
+		{name: "search with limit 21", path: search + "?q=usdc&limit=21", status: http.StatusBadRequest, malformed: true},
+		{name: "search with limit zero", path: search + "?q=usdc&limit=0", status: http.StatusBadRequest, malformed: true},
+		{name: "search with an unknown parameter", path: search + "?q=usdc&chain=eip155:1", status: http.StatusBadRequest},
+		{name: "search with a control character", path: search + "?q=us%00dc", status: http.StatusBadRequest},
+		{name: "search past its deadline", path: search + "?q=usdc", header: []string{"Sona-Deadline-Ms", "0"}, status: http.StatusGatewayTimeout},
 		{name: "token that is no address", path: eth + "usdc", status: http.StatusBadRequest, malformed: true},
 		{name: "chain that is no CAIP-2 id", path: "/internal/v1/chains/ethereum/tokens/" + usdc, status: http.StatusBadRequest},
 
@@ -189,7 +222,7 @@ func TestSpecOperationsAreTheRoutes(t *testing.T) {
 			documented = append(documented, method+" "+path)
 		}
 	}
-	served = append(served, "GET /healthz", "GET /readyz", "GET /internal/v1/status")
+	served = append(served, "GET /healthz", "GET /readyz", "GET /internal/v1/status", "GET "+searchPath)
 	for _, rt := range routes {
 		served = append(served, rt.pattern)
 	}
@@ -224,7 +257,11 @@ func TestSpecValidatesResponses(t *testing.T) {
 	}
 	for _, c := range cases() {
 		t.Run(c.name, func(t *testing.T) {
-			h := newSvc(t, c.mutate)
+			build := fixture.Service
+			if c.listsFailed {
+				build = fixture.ListsFailed
+			}
+			h := newSvcWith(t, build, c.mutate)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if c.gone {

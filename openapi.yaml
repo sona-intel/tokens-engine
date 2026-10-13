@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   summary: Internal token data for token pages on Ethereum and Monad, called only by sona-api.
   description: |
-    This service answers three questions about one ERC-20 token: what is it (name, symbol, supply, price, market cap, holder count), who holds it, and what were its largest recent transfers. It serves Ethereum (`eip155:1`) and Monad (`eip155:143`). Only the public `sona-api` will call it, and it will put these bodies inside its public answers. You call it directly to debug, or to see exactly what the public API will get.
+    This service answers three questions about one ERC-20 token: what is it (name, symbol, logo, supply, price, market cap, holder count), who holds it, and what were its largest recent transfers. It also finds a token by name or symbol for a search box. It serves Ethereum (`eip155:1`) and Monad (`eip155:143`). Only the public `sona-api` will call it, and it will put these bodies inside its public answers. You call it directly to debug, or to see exactly what the public API will get.
 
     | Container | Inside the Docker network | On the host |
     |---|---|---|
@@ -22,12 +22,25 @@ info:
     | holder count, top 10 share | Blockscout (`holders_count`, and the first page of holders) | GeckoTerminal (`holders.count`, `distribution_percentage.top_10`) |
     | holder list | Blockscout, 50 a page, read through and re-paged | the engine's own index, built from HyperSync |
     | large transfers | HyperSync, the last 7,200 blocks (about a day) or less for a busy token | the engine's own index, the largest of each UTC day over the last 7 days |
+    | logo | the curated lists' `logoURI`, then Blockscout's `icon_url` | the curated lists' `logoURI`, then GeckoTerminal's `image_url` |
+    | search | the curated lists (Uniswap default), then GeckoTerminal's pool search | the curated lists (Uniswap default, Monad token list), then GeckoTerminal's pool search, then the tokens the index holds |
 
     Nothing here calls a paid upstream: every JSON-RPC request carries `X-ERPC-Use-Upstream: !drpc-*`, and `/internal/v1/status` counts any call the router still billed in `paid_rpc_calls`.
 
     ## A token
 
     `{token}` is a contract address, `0x` and 40 hex digits in any case. Answers give it in lowercase. An address is a token when it answers both `decimals()` (a value from 0 to 255) and `totalSupply()`. Anything else, an externally owned account or a contract that is no ERC-20, answers 404 `not_found` on every route, and the engine remembers that for 10 minutes.
+
+    ## Token search
+
+    `GET /internal/v1/tokens/search` finds tokens on both chains by symbol or name. A token is **verified** when it is on a curated list. The lists are read when the engine starts and again every day, and a list that fails to load keeps its last copy:
+
+    | List | URL | Chains kept |
+    |---|---|---|
+    | Uniswap Labs default list | https://tokens.uniswap.org | Ethereum and Monad |
+    | Monad token list, kept by the Monad Foundation (`monad-crypto/token-list`) | https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/tokenlist-mainnet.json | Monad |
+
+    Every other token comes from GeckoTerminal's pool search or from the Monad index, and is never verified. Being on a list is not an endorsement: it only says that someone put the address there.
 
     ## The Monad index
 
@@ -47,7 +60,7 @@ info:
 
     ## Freshness
 
-    Contract reads are kept 2 minutes (a non-token 10 minutes), the price 1 minute, Blockscout answers 10 minutes, GeckoTerminal answers 15 minutes, and an Ethereum transfer window 15 minutes. A source that has never seen a token (a 404) is remembered for 15 minutes. Concurrent requests for the same key share one fetch, and a fetch keeps running after its caller gives up, so a slow source still fills the cache for the next caller.
+    Contract reads are kept 2 minutes (a non-token 10 minutes), the price 1 minute, Blockscout answers 10 minutes, GeckoTerminal answers 15 minutes, a GeckoTerminal search 5 minutes, and an Ethereum transfer window 15 minutes. A source that has never seen a token (a 404) is remembered for 15 minutes. Concurrent requests for the same key share one fetch, and a fetch keeps running after its caller gives up, so a slow source still fills the cache for the next caller.
 
     ## Time budget
 
@@ -61,7 +74,7 @@ info:
 
     | Status | `code` | When |
     |---|---|---|
-    | 400 | `invalid_query` | an unknown or repeated query parameter, a `limit` out of range, or a `cursor` this engine did not make |
+    | 400 | `invalid_query` | an unknown or repeated query parameter, a `limit` out of range, a `cursor` this engine did not make, or a search `q` that is not 2 to 64 characters once trimmed |
     | 400 | `invalid_id` | a `{chain}` that is no CAIP-2 id, or a `{token}` that is not `0x` and 40 hex digits |
     | 404 | `unsupported_chain` | a CAIP-2 chain other than `eip155:1` and `eip155:143` |
     | 404 | `not_found` | the address is not an ERC-20 token, or no route serves the path (`detail` is then `No such route.`) |
@@ -83,6 +96,9 @@ tags:
   - name: Tokens
     description: |
       One ERC-20 token: what it is, who holds it and its largest recent transfers.
+  - name: Search
+    description: |
+      Find a token by symbol or name.
   - name: Status
     description: |
       The sources, the HyperSync quota and the Monad index.
@@ -106,6 +122,7 @@ paths:
         - `fdv_usd`: `total_supply` times `price_usd`, `null` without a price.
         - `market_cap_usd`: the circulating market cap a provider reports (Blockscout on Ethereum, GeckoTerminal on Monad), `null` when it reports none. Providers take it from CoinGecko, which counts a token's supply on every chain, so for a bridged token such as USDC it is above this chain's `fdv_usd`. The record then holds `token_market_cap_multichain`.
         - `holder_count` and `top10_share`: Blockscout's holder count and the share of the 10 largest holders on Ethereum, GeckoTerminal's on Monad (coverage `token_holder_count_provider`). On Monad the count falls back to the index when GeckoTerminal has none and the index of the token is complete.
+        - `logo_url`: the token's logo as an https URL, from the curated lists first, then Blockscout's `icon_url` (Ethereum) or GeckoTerminal's `image_url` (Monad). `null` when none gives one. Anything that is not an https URL is dropped.
         - `sources`: the sources that answered, from `rpc`, `prices`, `blockscout`, `geckoterminal` and `sona_index`.
 
         This route does not queue the token in the Monad index. It takes no query parameters.
@@ -120,10 +137,10 @@ paths:
               examples:
                 monad_usdc:
                   summary: USDC on Monad
-                  value: {"kind": "token_info", "chain": "eip155:143", "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603", "name": "USDC", "symbol": "USDC", "decimals": 6, "total_supply": {"raw": "226181868642795", "decimals": 6, "value": "226181868.642795"}, "price_usd": 0.9998520528303461, "fdv_usd": 226148405.676, "market_cap_usd": 72572702149.0666, "holder_count": 76442, "top10_share": 0.766237, "sources": ["rpc", "prices", "geckoterminal"], "coverage": ["token_market_cap_multichain", "token_holder_count_provider"]}
+                  value: {"kind": "token_info", "chain": "eip155:143", "token": "0x754704bc059f8c67012fed69bc8a327a5aafb603", "name": "USDC", "symbol": "USDC", "decimals": 6, "total_supply": {"raw": "226181868642795", "decimals": 6, "value": "226181868.642795"}, "price_usd": 0.9998520528303461, "fdv_usd": 226148405.676, "market_cap_usd": 72572702149.0666, "holder_count": 76442, "top10_share": 0.766237, "logo_url": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png", "sources": ["rpc", "prices", "geckoterminal"], "coverage": ["token_market_cap_multichain", "token_holder_count_provider"]}
                 mkr:
                   summary: MKR on Ethereum, a bytes32 name and symbol
-                  value: {"kind": "token_info", "chain": "eip155:1", "token": "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2", "name": "Maker", "symbol": "MKR", "decimals": 18, "total_supply": {"raw": "83465892107442956720626", "decimals": 18, "value": "83465.892107442956720626"}, "price_usd": 1756.4342141940788, "fdv_usd": 146602348.616, "market_cap_usd": null, "holder_count": 78674, "top10_share": 0.6469578717, "sources": ["rpc", "prices", "blockscout"], "coverage": []}
+                  value: {"kind": "token_info", "chain": "eip155:1", "token": "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2", "name": "Maker", "symbol": "MKR", "decimals": 18, "total_supply": {"raw": "83465892107442956720626", "decimals": 18, "value": "83465.892107442956720626"}, "price_usd": 1756.4342141940788, "fdv_usd": 146602348.616, "market_cap_usd": null, "holder_count": 78674, "top10_share": 0.6469578717, "logo_url": "https://assets.coingecko.com/coins/images/1364/small/Mark_Maker.png?1696502423", "sources": ["rpc", "prices", "blockscout"], "coverage": []}
         "400": {$ref: '#/components/responses/InvalidRequest'}
         "404": {$ref: '#/components/responses/NotFound'}
         "499": {$ref: '#/components/responses/ClientClosed'}
@@ -198,6 +215,51 @@ paths:
               schema: {$ref: '#/components/schemas/TokenTransfers'}
         "400": {$ref: '#/components/responses/InvalidRequest'}
         "404": {$ref: '#/components/responses/NotFound'}
+        "499": {$ref: '#/components/responses/ClientClosed'}
+        "500": {$ref: '#/components/responses/Internal'}
+        "503": {$ref: '#/components/responses/Unavailable'}
+        "504": {$ref: '#/components/responses/DeadlineExceeded'}
+  /internal/v1/tokens/search:
+    parameters:
+      - $ref: '#/components/parameters/DeadlineMs'
+    get:
+      operationId: searchTokens
+      tags: [Search]
+      summary: Find tokens by symbol or name on Ethereum and Monad
+      description: |
+        Call this for the search box. `q` is trimmed and lowercased, and must be 2 to 64 characters. A token matches when its symbol starts with `q`, then when its name starts with `q`, then when its symbol contains it, then when its name does. A full address matches that token.
+
+        Ranking is the point of this route:
+
+        1. **Verified tokens first.** A token on a curated list (see "Token search" in the description above) has `verified: true`. Among them the better match comes first (symbol prefix, name prefix, symbol contains, name contains), an exact symbol before a longer one, a token of an earlier list before a later one (Uniswap default, then the Monad list), then deeper pool liquidity.
+        2. **The rest after,** with `verified: false`, by the same match order and then by the pool liquidity GeckoTerminal reports (the sum of `reserve_in_usd` of the pools found). A token that copies the name of a real one, such as another USDC, is on no list, so it can never come before the real token.
+
+        The long tail comes from GeckoTerminal's pool search, which the engine paces with the rest of its GeckoTerminal calls (20 a minute). One search spends one request per chain, and the answer is kept for 5 minutes. When GeckoTerminal does not answer within 3 seconds the route still answers 200 with the curated tokens and the code `token_search_long_tail_unavailable`. Tokens the Monad index already holds are included even if GeckoTerminal does not know them. The native coin MON is not a token and is not listed; wrapped MON is.
+
+        `logo_url` is an https URL from a list's `logoURI` or GeckoTerminal's `image_url`, `null` when there is none. A search with no match answers 200 with `items: []`. Errors: 400 `invalid_query` for a bad `q` or `limit` or another query key.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The text to look for in symbols and names, 2 to 64 characters once trimmed. It is lowercased.
+          schema: {type: string, minLength: 2, maxLength: 64}
+          examples:
+            usdc: {summary: A symbol, value: usdc}
+            name: {summary: A name, value: wrapped mon}
+        - name: limit
+          in: query
+          required: false
+          description: How many tokens to return, from 1 to 20. The default is 8.
+          schema: {type: integer, minimum: 1, maximum: 20, default: 8}
+      responses:
+        "200":
+          description: The matching tokens, best first.
+          headers:
+            X-Request-Id: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TokenSearch'}
+        "400": {$ref: '#/components/responses/InvalidRequest'}
         "499": {$ref: '#/components/responses/ClientClosed'}
         "500": {$ref: '#/components/responses/Internal'}
         "503": {$ref: '#/components/responses/Unavailable'}
@@ -408,9 +470,9 @@ components:
       enum: [rpc, prices, blockscout, geckoterminal, hypersync, sona_index]
     CoverageCode:
       type: string
-      enum: [token_price_unknown, token_source_unavailable, token_market_cap_multichain, token_index_partial, token_index_unavailable, token_holders_from_activity, token_balances_from_transfers, token_transfer_window_cut, token_holder_count_provider, token_holders_ranked_by_provider]
+      enum: [token_price_unknown, token_source_unavailable, token_market_cap_multichain, token_index_partial, token_index_unavailable, token_holders_from_activity, token_balances_from_transfers, token_transfer_window_cut, token_holder_count_provider, token_holders_ranked_by_provider, token_search_list_unavailable, token_search_long_tail_unavailable, token_search_unverified]
       description: |
-        A limit that applies to the answer. `token_price_unknown` no price is known. `token_source_unavailable` a source failed and its fields are null. `token_market_cap_multichain` the provider's market cap counts the token on other chains too. `token_index_partial` the Monad index of the token is still being built. `token_index_unavailable` the index cannot take the token now. `token_holders_from_activity` the index follows the addresses active since `index.start_block`. `token_balances_from_transfers` balances are sums of transfer events. `token_transfer_window_cut` the Ethereum window is shorter than 7,200 blocks. `token_holder_count_provider` holder figures come from GeckoTerminal. `token_holders_ranked_by_provider` the holder list is Blockscout's.
+        A limit that applies to the answer. `token_price_unknown` no price is known. `token_source_unavailable` a source failed and its fields are null. `token_market_cap_multichain` the provider's market cap counts the token on other chains too. `token_index_partial` the Monad index of the token is still being built. `token_index_unavailable` the index cannot take the token now. `token_holders_from_activity` the index follows the addresses active since `index.start_block`. `token_balances_from_transfers` balances are sums of transfer events. `token_transfer_window_cut` the Ethereum window is shorter than 7,200 blocks. `token_holder_count_provider` holder figures come from GeckoTerminal. `token_holders_ranked_by_provider` the holder list is Blockscout's. `token_search_list_unavailable` a curated list has not loaded yet. `token_search_long_tail_unavailable` GeckoTerminal did not answer in time. `token_search_unverified` the search holds tokens on no curated list.
     Coverage:
       type: array
       items: {$ref: '#/components/schemas/CoverageCode'}
@@ -418,7 +480,7 @@ components:
     TokenInfo:
       type: object
       additionalProperties: false
-      required: [kind, chain, token, name, symbol, decimals, total_supply, price_usd, fdv_usd, market_cap_usd, holder_count, top10_share, sources, coverage]
+      required: [kind, chain, token, name, symbol, decimals, total_supply, price_usd, fdv_usd, market_cap_usd, holder_count, top10_share, logo_url, sources, coverage]
       properties:
         kind: {type: string, enum: [token_info]}
         chain: {$ref: '#/components/schemas/Chain'}
@@ -432,7 +494,37 @@ components:
         market_cap_usd: {$ref: '#/components/schemas/Usd'}
         holder_count: {type: [integer, "null"], minimum: 0}
         top10_share: {type: [number, "null"], minimum: 0}
+        logo_url: {$ref: '#/components/schemas/LogoUrl'}
         sources: {type: array, items: {$ref: '#/components/schemas/Source'}}
+        coverage: {$ref: '#/components/schemas/Coverage'}
+    LogoUrl:
+      type: [string, "null"]
+      pattern: '^https://[^\s]+$'
+      maxLength: 512
+      description: The token's logo, an https URL, or null when no source gives one.
+    SearchItem:
+      type: object
+      additionalProperties: false
+      required: [chain, token, name, symbol, decimals, verified, logo_url]
+      properties:
+        chain: {$ref: '#/components/schemas/Chain'}
+        token: {$ref: '#/components/schemas/Address'}
+        name: {type: [string, "null"], maxLength: 128}
+        symbol: {type: [string, "null"], maxLength: 128}
+        decimals: {type: integer, minimum: 0, maximum: 255}
+        verified: {type: boolean, description: 'True when the token is on a curated list. False says only that no curated list has it.'}
+        logo_url: {$ref: '#/components/schemas/LogoUrl'}
+    TokenSearch:
+      type: object
+      additionalProperties: false
+      required: [kind, items, coverage]
+      properties:
+        kind: {type: string, enum: [token_search]}
+        items:
+          type: array
+          maxItems: 20
+          items: {$ref: '#/components/schemas/SearchItem'}
+          description: The matching tokens, best first, verified tokens before the rest.
         coverage: {$ref: '#/components/schemas/Coverage'}
     IndexState:
       type: object
