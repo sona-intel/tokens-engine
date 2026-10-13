@@ -194,12 +194,13 @@ func (s *Store) Holders(ctx context.Context, id int32, limit int, after *HolderC
 		err  error
 	)
 	if after == nil {
-		rows, err = s.Pool.Query(ctx, `select holder, balance::text from balances where token_id = $1
-			order by balance desc, holder limit $2`, id, limit)
+		// the text cast gets its own name, so the order is numeric and not by the text
+		rows, err = s.Pool.Query(ctx, `select holder, balance::text as amount from balances where token_id = $1
+			order by balances.balance desc, holder limit $2`, id, limit)
 	} else {
-		rows, err = s.Pool.Query(ctx, `select holder, balance::text from balances where token_id = $1
+		rows, err = s.Pool.Query(ctx, `select holder, balance::text as amount from balances where token_id = $1
 			and (balance < $2::numeric or (balance = $2::numeric and holder > $3))
-			order by balance desc, holder limit $4`, id, after.Balance.String(), after.Holder[:], limit)
+			order by balances.balance desc, holder limit $4`, id, after.Balance.String(), after.Holder[:], limit)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("holders: %w", err)
@@ -226,8 +227,8 @@ func (s *Store) Holders(ctx context.Context, id int32, limit int, after *HolderC
 
 // TopTransfers returns the largest kept transfers from fromDay on
 func (s *Store) TopTransfers(ctx context.Context, id int32, fromDay string, limit int) ([]Transfer, error) {
-	rows, err := s.Pool.Query(ctx, `select block, log_index, tx, ts, sender, recipient, amount::text from large_transfers
-		where token_id = $1 and day >= $2::date order by amount desc, block desc, log_index desc limit $3`, id, fromDay, limit)
+	rows, err := s.Pool.Query(ctx, `select block, log_index, tx, ts, sender, recipient, amount::text as value from large_transfers
+		where token_id = $1 and day >= $2::date order by large_transfers.amount desc, block desc, log_index desc limit $3`, id, fromDay, limit)
 	if err != nil {
 		return nil, fmt.Errorf("transfers: %w", err)
 	}

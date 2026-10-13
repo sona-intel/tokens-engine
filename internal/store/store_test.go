@@ -30,7 +30,7 @@ func TestCommitDeltasAndBalances(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := store.Batch{TokenID: tok.ID, FromBlock: 0, NextBlock: 10, Requests: 1, Deltas: map[evm.Address]*big.Int{
-		addr(1): big.NewInt(500), addr(2): big.NewInt(500), addr(3): big.NewInt(200),
+		addr(1): big.NewInt(500), addr(2): big.NewInt(500), addr(3): big.NewInt(200), addr(5): big.NewInt(99), addr(6): big.NewInt(1000),
 	}}
 	if err := st.Commit(ctx, b); err != nil {
 		t.Fatal(err)
@@ -46,20 +46,21 @@ func TestCommitDeltasAndBalances(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _, _ := st.GetToken(ctx, monad, addr(100))
-	if got.NextBlock != 20 || got.Holders != 2 || got.Requests != 2 || got.State != store.StateIndexing {
+	if got.NextBlock != 20 || got.Holders != 4 || got.Requests != 2 || got.State != store.StateIndexing {
 		t.Fatalf("token %+v", got)
 	}
-	rows, err := st.Holders(ctx, tok.ID, 1, nil)
-	if err != nil || len(rows) != 1 || rows[0].Holder != addr(1) || rows[0].Balance.Int64() != 700 {
+	// numeric order: 1000, 700, 500, 99, which as text would be 99, 700, 500, 1000
+	rows, err := st.Holders(ctx, tok.ID, 2, nil)
+	if err != nil || len(rows) != 2 || rows[0].Holder != addr(6) || rows[1].Holder != addr(1) || rows[1].Balance.Int64() != 700 {
 		t.Fatalf("first page %+v %v", rows, err)
 	}
-	rows, _ = st.Holders(ctx, tok.ID, 5, &store.HolderCursor{Balance: rows[0].Balance, Holder: rows[0].Holder})
-	if len(rows) != 1 || rows[0].Holder != addr(2) {
+	rows, _ = st.Holders(ctx, tok.ID, 5, &store.HolderCursor{Balance: rows[1].Balance, Holder: rows[1].Holder})
+	if len(rows) != 2 || rows[0].Holder != addr(2) || rows[1].Holder != addr(5) {
 		t.Fatalf("second page %+v", rows)
 	}
 	// absolute balances replace, and a zero removes the holder
 	if err := st.Commit(ctx, store.Batch{TokenID: tok.ID, FromBlock: 20, NextBlock: 30, Balances: map[evm.Address]*big.Int{
-		addr(1): big.NewInt(5), addr(2): big.NewInt(0), addr(4): big.NewInt(9),
+		addr(1): big.NewInt(5), addr(2): big.NewInt(0), addr(4): big.NewInt(9), addr(5): big.NewInt(0), addr(6): big.NewInt(0),
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +93,9 @@ func TestLargeTransfersPerDay(t *testing.T) {
 		if i >= 3 {
 			at = day2
 		}
-		trs = append(trs, store.Transfer{Block: uint64(100 + i), LogIndex: 1, Time: at, From: addr(1), To: addr(2), Amount: big.NewInt(int64(10 * (i + 1)))})
+		// 1, 10, 100 on day 1 and 1000, 10000, 100000 on day 2, which sort differently as text
+		amount := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(i)), nil)
+		trs = append(trs, store.Transfer{Block: uint64(100 + i), LogIndex: 1, Time: at, From: addr(1), To: addr(2), Amount: amount})
 	}
 	if err := st.Commit(ctx, store.Batch{TokenID: tok.ID, FromBlock: 0, NextBlock: 200, Transfers: trs, CutoffDay: "2026-10-12", TopPerDay: 2}); err != nil {
 		t.Fatal(err)
@@ -101,7 +104,7 @@ func TestLargeTransfersPerDay(t *testing.T) {
 	if err != nil || len(got) != 4 {
 		t.Fatalf("%d transfers, want 2 a day: %v", len(got), err)
 	}
-	if got[0].Amount.Int64() != 60 || got[3].Amount.Int64() != 20 {
+	if got[0].Amount.Int64() != 100000 || got[1].Amount.Int64() != 10000 || got[2].Amount.Int64() != 100 || got[3].Amount.Int64() != 10 {
 		t.Errorf("order %v ... %v", got[0].Amount, got[3].Amount)
 	}
 	if err := st.PruneTransfers(ctx, "2026-10-13"); err != nil {
