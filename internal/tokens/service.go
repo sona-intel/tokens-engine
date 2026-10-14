@@ -228,10 +228,12 @@ func decodeMeta(res []evm.Result3) (Meta, error) {
 	return m, nil
 }
 
-// Decimals is for the index pre-warm, which needs the decimals of a token before any request names it
+// Decimals is for the index pre-warm, which needs the decimals of a token before any request names it.
+// The read runs in the visitor lane of the RPC pacer because a visitor's ensure-token joins it through the meta cache,
+// and a joined read must not wait in the background queue.
 func (s *Service) Decimals(chain string) func(context.Context, evm.Address) (uint8, error) {
 	return func(ctx context.Context, token evm.Address) (uint8, error) {
-		m, err := s.Meta(ctx, chain, token)
+		m, err := s.Meta(rpc.WithVisitor(ctx), chain, token)
 		return m.Decimals, err
 	}
 }

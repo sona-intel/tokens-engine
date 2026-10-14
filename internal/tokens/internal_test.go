@@ -2,10 +2,13 @@ package tokens
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"testing"
 	"time"
 
+	"tokens/internal/config"
+	"tokens/internal/evm"
 	"tokens/internal/rpc"
 )
 
@@ -70,5 +73,31 @@ func TestRatioAndTimes(t *testing.T) {
 	}
 	if times(supply, 6, 0) != nil {
 		t.Error("an fdv without a price")
+	}
+}
+
+type laneChain struct{ lane rpc.Lane }
+
+func (c *laneChain) Aggregate3(ctx context.Context, calls []evm.Call3) ([]evm.Result3, error) {
+	c.lane = rpc.LaneOf(ctx)
+	return make([]evm.Result3, len(calls)), nil
+}
+
+func (*laneChain) HeaderByNumber(context.Context, uint64) (rpc.Header, error) {
+	return rpc.Header{}, errors.New("unused")
+}
+
+func (*laneChain) BlockNumber(context.Context) (uint64, error) { return 0, errors.New("unused") }
+
+// the pre-warm read is joined by a visitor's ensure-token, so it must not wait in the background queue
+func TestPrewarmMetaReadUsesVisitorLane(t *testing.T) {
+	chain := &laneChain{lane: rpc.Background}
+	s := New(Deps{
+		Config: config.Config{Chains: []config.Chain{{ID: "eip155:143"}}, MetaCache: time.Minute},
+		Chains: map[string]Chain{"eip155:143": chain},
+	})
+	_, _ = s.Decimals("eip155:143")(t.Context(), evm.MustAddress("0x754704bc059f8c67012fed69bc8a327a5aafb603"))
+	if chain.lane != rpc.Visitor {
+		t.Fatal("the pre-warm read ran in the background lane")
 	}
 }
