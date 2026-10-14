@@ -169,6 +169,9 @@ func (s *Service) ChainActivity(_ context.Context, chain string, days int) (Chai
 	}
 	all, at, lerr, ok := c.activity.get()
 	if !ok {
+		if c.cfg.ActivitySource == config.ActivityBlocks {
+			return ChainActivity{}, unavailable(sourceBlockCount, lerr)
+		}
 		return ChainActivity{}, unavailable(sourceBlockscout, lerr)
 	}
 	cutoff := s.d.Now().UTC().AddDate(0, 0, -(days - 1)).Format(time.DateOnly)

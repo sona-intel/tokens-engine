@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -411,6 +412,9 @@ func TestActivityCountedFromBlocksLeavesTheOtherSeriesOut(t *testing.T) {
 		Stats:  map[string]markets.StatsSource{fixture.Monad: blockLines{"newTxns": 1500000, "averageGasPrice": 112.5, "networkUtilization": 0.0425}},
 		Now:    func() time.Time { return now },
 	})
+	if _, err := s.ChainActivity(t.Context(), fixture.Monad, 30); err == nil || !strings.HasPrefix(err.Error(), "chainstats is unavailable") {
+		t.Errorf("before the first read %v", err)
+	}
 	if err := s.RefreshActivity(t.Context()); err != nil {
 		t.Fatal(err)
 	}

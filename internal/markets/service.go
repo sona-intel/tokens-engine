@@ -29,6 +29,8 @@ const (
 	sourceCoinGecko  = "coingecko"
 	sourceDefiLlama  = "defillama"
 	sourceBlockscout = "blockscout"
+	// sourceBlockCount is the engine's own count of a chain's blocks, kept in Postgres
+	sourceBlockCount = "chainstats"
 )
 
 // slot holds the last good copy of one source answer and when it was read
