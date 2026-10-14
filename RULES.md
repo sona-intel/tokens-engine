@@ -163,6 +163,8 @@ It reads HyperSync block pages on the background lane. A page has every block fr
 
 `active_accounts`, `new_accounts` and the fees are left out, and the record says so with `chain_activity_from_blocks`. New accounts need every sender since genesis, and active accounts a set of each day's senders kept across pages. Monad charges the gas limit rather than the gas used, so fees would need each transaction's limit and price and a rule this engine does not have.
 
+The copy counts as read at the time of the newest counted block (after a restart, until the first page, the time the cursor last moved), so a count that stops, or that is more than 3 hours behind while it catches up after the engine was stopped, answers `chain_activity_stale`. A page that fails is asked again after `poll`, so one that keeps failing costs no more than the count at the head.
+
 The day of the first block counted began before the count, so it is never served. With `backfill_days` 0 the count starts one block below the head, and the series stay empty until the next UTC day. With `backfill_days` N it starts before the midnight N days back: two one-block probes 1,000,000 blocks apart give the blocks a second, and the start goes 5% further back, so N whole days are served.
 
 **Cost.** A block page held 676 Monad blocks at 10:12 UTC and about 1,500 at 17:00 UTC on 2026-10-14: an hour of 12,000 blocks took 8 requests. Following the head (`poll` 10 minutes, `lag_blocks` 10) costs about 190 to 430 requests a day on the background lane, which allows 3 a minute for every background job of the engine. A 90-day backfill is about 17,000 to 38,000 requests, 4 to 9 days of the whole lane, while the index backfills wait, and Sona has no other HyperSync key. So `backfill_days` stays 0 everywhere, the server included: Monad's series start empty and fill one day at a time.
@@ -176,7 +178,7 @@ The day of the first block counted began before the count, so it is never served
 | `market_top_coins_stale` | the CoinGecko list is over 15 minutes old because its refresh keeps failing |
 | `market_token_map_unavailable` | the address map has not loaded, or is over 3 days old, so `tokens` can be empty or out of date |
 | `chain_defi_stale` | the DefiLlama copy is over 3 hours old |
-| `chain_activity_stale` | the copy of the activity source is over 3 hours old |
+| `chain_activity_stale` | the copy of the activity source is over 3 hours old, or on Monad the newest counted block is |
 | `chain_activity_from_blocks` | Sona counts the chain's activity from its blocks, so the account and fee series are missing (Monad) |
 | `chain_series_last_day_partial` | the last item is the current UTC day |
 | `chain_protocols_not_additive` | protocol rows do not sum to the chain's TVL |

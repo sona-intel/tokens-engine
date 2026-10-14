@@ -89,6 +89,12 @@ type StatsSource interface {
 	StatsLine(ctx context.Context, id, from, to string) ([]sources.StatPoint, error)
 }
 
+// CountedSource is a stats source that counts the chain itself, CountedTo is the time of the newest block it counted, zero before any
+type CountedSource interface {
+	StatsSource
+	CountedTo(ctx context.Context) (time.Time, error)
+}
+
 // Deps are the sources and the clock of the service
 type Deps struct {
 	Config    config.Markets

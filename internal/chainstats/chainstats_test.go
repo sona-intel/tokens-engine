@@ -296,3 +296,22 @@ func TestStatsLineAnswersThreeLines(t *testing.T) {
 		}
 	}
 }
+
+func TestCountedToFollowsTheNewestBlock(t *testing.T) {
+	moved := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	src := &pageSource{page: recordedPage(t), size: 7, height: pageNext + 10}
+	st := &memStore{cur: &store.StatsCursor{Next: pageFrom, Updated: moved}, days: map[string]store.StatsDay{}}
+	c := counter(src, st, 0)
+	if to, err := c.CountedTo(t.Context()); err != nil || !to.Equal(moved) {
+		t.Fatalf("before a page %v %v", to, err)
+	}
+	if err := c.CatchUp(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if to, err := c.CountedTo(t.Context()); err != nil || !to.Equal(time.Unix(int64(src.page.Blocks[39].Time), 0)) {
+		t.Errorf("after the pages %v %v", to, err)
+	}
+	if to, err := counter(src, &memStore{days: map[string]store.StatsDay{}}, 0).CountedTo(t.Context()); err != nil || !to.IsZero() {
+		t.Errorf("before the first count %v %v", to, err)
+	}
+}

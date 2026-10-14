@@ -432,3 +432,34 @@ func TestActivityCountedFromBlocksLeavesTheOtherSeriesOut(t *testing.T) {
 		t.Errorf("coverage %v", got.Coverage)
 	}
 }
+
+// countedLines is blockLines with the time of the newest block the count reached
+type countedLines struct {
+	blockLines
+	to time.Time
+}
+
+func (c countedLines) CountedTo(context.Context) (time.Time, error) { return c.to, nil }
+
+func TestActivityCountedFromBlocksIsStaleWhenTheCountFallsBehind(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	for behind, want := range map[time.Duration][]string{
+		10 * time.Minute: {"chain_activity_from_blocks", "chain_series_last_day_partial"},
+		4 * time.Hour:    {"chain_activity_stale", "chain_activity_from_blocks", "chain_series_last_day_partial"},
+	} {
+		cfg := fixture.MarketsConfig()
+		cfg.Chains = []config.MarketChain{{ID: fixture.Monad, LlamaName: "Monad", Activity: true, ActivitySource: config.ActivityBlocks}}
+		src := countedLines{blockLines{"newTxns": 1500000}, now.Add(-behind)}
+		s := markets.New(markets.Deps{Config: cfg, Stats: map[string]markets.StatsSource{fixture.Monad: src}, Now: func() time.Time { return now }})
+		if err := s.RefreshActivity(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.ChainActivity(t.Context(), fixture.Monad, 30)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(got.Coverage, want) {
+			t.Errorf("%s behind: coverage %v", behind, got.Coverage)
+		}
+	}
+}

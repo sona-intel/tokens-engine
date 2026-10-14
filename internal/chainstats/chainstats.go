@@ -10,6 +10,7 @@ import (
 	"math/bits"
 	"slices"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"tokens/internal/config"
@@ -39,6 +40,8 @@ type Store interface {
 	StatsDays(ctx context.Context, chain, from, to string) ([]store.StatsDay, error)
 }
 
+var _ markets.CountedSource = (*Counter)(nil)
+
 // Counter counts one chain's blocks into days and answers its activity lines
 type Counter struct {
 	chain  string
@@ -47,6 +50,8 @@ type Counter struct {
 	src    Source
 	st     Store
 	log    *slog.Logger
+	// last is the Unix time of the newest block this process counted, 0 before its first page
+	last atomic.Int64
 }
 
 // New counts the chain mc on the source's background lane into st
@@ -115,9 +120,22 @@ func (c *Counter) CatchUp(ctx context.Context) error {
 		if err := c.st.AddStats(ctx, c.chain, from, page.NextBlock, first, days); err != nil {
 			return err
 		}
+		c.last.Store(int64(page.Blocks[len(page.Blocks)-1].Time))
 		from = page.NextBlock
 	}
 	return nil
+}
+
+// CountedTo is the time of the newest counted block, or before this process counted a page the time the cursor last moved, zero before the first count
+func (c *Counter) CountedTo(ctx context.Context) (time.Time, error) {
+	if sec := c.last.Load(); sec > 0 {
+		return time.Unix(sec, 0).UTC(), nil
+	}
+	cur, ok, err := c.st.StatsCursor(ctx, c.chain)
+	if err != nil || !ok {
+		return time.Time{}, err
+	}
+	return cur.Updated, nil
 }
 
 // start is a block below the head, or with BackfillDays a block before the midnight that many days ago by the block rate below the head

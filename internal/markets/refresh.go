@@ -254,7 +254,19 @@ func (s *Service) RefreshActivity(ctx context.Context) error {
 			}
 			series = append(series, Series{Metric: metric, Items: items})
 		}
-		c.activity.set(series, s.d.Now())
+		// a count that fell behind makes the copy as old as its newest block, so the answer says it is stale
+		at := s.d.Now()
+		if counted, ok := stats.(CountedSource); ok {
+			to, err := counted.CountedTo(ctx)
+			if err != nil {
+				c.activity.fail(err)
+				return err
+			}
+			if !to.IsZero() && to.Before(at) {
+				at = to
+			}
+		}
+		c.activity.set(series, at)
 		return nil
 	})
 }

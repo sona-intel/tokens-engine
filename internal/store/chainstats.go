@@ -12,10 +12,11 @@ import (
 // ErrStatsMoved is a page that no longer starts at the chain's cursor, because another writer counted it first
 var ErrStatsMoved = errors.New("the chain stats cursor moved")
 
-// StatsCursor is where the count of a chain stands, First is the time of the first block it counted
+// StatsCursor is where the count of a chain stands, First is the time of the first block it counted and Updated when it last moved
 type StatsCursor struct {
-	Next  uint64
-	First time.Time
+	Next    uint64
+	First   time.Time
+	Updated time.Time
 }
 
 // StatsDay is the count of one chain and UTC day, the gas figures as decimal strings
@@ -31,17 +32,17 @@ type StatsDay struct {
 // StatsCursor returns where the count of a chain stands, false before its first page
 func (s *Store) StatsCursor(ctx context.Context, chain string) (StatsCursor, bool, error) {
 	var (
-		next  int64
-		first time.Time
+		next           int64
+		first, updated time.Time
 	)
-	err := s.Pool.QueryRow(ctx, `select next_block, first_time from chain_stats_cursor where chain_id = $1`, chain).Scan(&next, &first)
+	err := s.Pool.QueryRow(ctx, `select next_block, first_time, updated_at from chain_stats_cursor where chain_id = $1`, chain).Scan(&next, &first, &updated)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StatsCursor{}, false, nil
 	}
 	if err != nil {
 		return StatsCursor{}, false, fmt.Errorf("read chain stats cursor: %w", err)
 	}
-	return StatsCursor{Next: u64(next), First: first.UTC()}, true, nil
+	return StatsCursor{Next: u64(next), First: first.UTC(), Updated: updated.UTC()}, true, nil
 }
 
 // AddStats adds the days of a page that began at from and moves the cursor to next, a chain's first page also records first, the time of block from

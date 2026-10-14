@@ -35,7 +35,7 @@ func TestChainStatsAddPagesAndKeepTheFirstDayOut(t *testing.T) {
 		t.Fatalf("a page counted twice: %v", err)
 	}
 	cur, ok, err := st.StatsCursor(ctx, monad)
-	if err != nil || !ok || cur.Next != 140 || !cur.First.Equal(first) {
+	if err != nil || !ok || cur.Next != 140 || !cur.First.Equal(first) || time.Since(cur.Updated).Abs() > time.Minute {
 		t.Fatalf("cursor %+v %v %v", cur, ok, err)
 	}
 	days, err := st.StatsDays(ctx, monad, "2026-10-01", "2026-10-31")

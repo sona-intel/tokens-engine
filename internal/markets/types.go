@@ -38,7 +38,7 @@ var (
 	CovTopCoinsStale      = Note{"market_top_coins_stale", "CoinGecko's market list could not be refreshed for over 15 minutes, so the prices are older than 5 minutes."}
 	CovTokenMapMissing    = Note{"market_token_map_unavailable", "CoinGecko's list of contract addresses has not loaded, or could not be refreshed for over 3 days, so tokens may be empty or out of date."}
 	CovDefiStale          = Note{"chain_defi_stale", "DefiLlama could not be refreshed for over 3 hours, so the figures are older than an hour."}
-	CovActivityStale      = Note{"chain_activity_stale", "The activity source could not be read for over 3 hours, so the figures are older than an hour."}
+	CovActivityStale      = Note{"chain_activity_stale", "The activity source could not be read for over 3 hours, or Sona's count of the chain's blocks is over 3 hours behind, so the figures are older than an hour."}
 	CovActivityFromBlocks = Note{"chain_activity_from_blocks", "Sona counts this chain's activity from its blocks and transactions, without the chain's system transactions. Blocks do not say which accounts are active or new, and the fees are not counted, so those series are left out."}
 	CovLastDayPartial     = Note{"chain_series_last_day_partial", "The last item is the current UTC day, still in progress, so it is lower than a full day and moves between reads."}
 	CovNotAdditive        = Note{"chain_protocols_not_additive", "Each tvl_usd is a protocol's own TVL on the chain. DefiLlama's chain TVL leaves out double counting between protocols, so the rows do not add up to it."}
