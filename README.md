@@ -13,7 +13,7 @@ Beside the token records it serves figures for the market and for each chain, re
 
 - the largest coins by market cap, with their contracts on Ethereum, Monad and Arc (`GET /internal/v1/markets/top-coins`);
 - a chain's DeFi figures: TVL by day, protocols by TVL, stablecoin supply and DEX volume (`GET /internal/v1/chains/{chain}/defi/{tvl,protocols,stablecoins,dexs}`);
-- Ethereum's daily activity: transactions, accounts, gas price, fees and utilization (`GET /internal/v1/chains/eip155:1/activity`).
+- a chain's daily activity: transactions, accounts, gas price, fees and utilization on Ethereum and Arc, and on Monad, counted from its blocks, transactions, gas price and utilization (`GET /internal/v1/chains/{chain}/activity`).
 
 [`RULES.md`](RULES.md) says how every number is made and where it falls short.
 
@@ -30,11 +30,11 @@ The engine only reads. It holds no wallet or private key and signs nothing. Its 
 | Blockscout (`eth.blockscout.com`, keyless, at most 3 requests a second) | Ethereum: holder count, circulating market cap, holder pages |
 | GeckoTerminal (`api.geckoterminal.com`, keyless, at most 20 requests a minute) | Monad and Arc (networks `monad` and `arc`): holder count, top 10 share, market cap, logo. Every chain: the pool search behind the token search |
 | Curated token lists (Uniswap default list at `tokens.uniswap.org`, the Monad Foundation's `monad-crypto/token-list` on GitHub, keyless, read on start and daily) | verified tokens of the search and the first choice of `logo_url`. Neither lists an Arc token, and CoinGecko's Arc list is left out (`RULES.md` says why) |
-| Envio HyperSync (`ENVIO_HYPERSYNC_KEY`) | Ethereum: the transfer window of a token and the links of holder maps. Monad and Arc (`arc.hypersync.xyz`): the backfill and the tail of each chain's holder index |
+| Envio HyperSync (`ENVIO_HYPERSYNC_KEY`) | Ethereum: the transfer window of a token and the links of holder maps. Monad and Arc (`arc.hypersync.xyz`): the backfill and the tail of each chain's holder index. Monad: the block pages of its activity count |
 | CoinGecko (`api.coingecko.com`, keyless, at most 1 request every 20 seconds; the optional demo key `COINGECKO_API_KEY` goes in `x-cg-demo-api-key`) | the top coins and the coin list with contract addresses |
 | DefiLlama (`api.llama.fi`, `stablecoins.llama.fi`, keyless, at most 30 requests a minute) | TVL, protocols, stablecoins and DEX volume of a chain |
-| Blockscout stats service (`eth.blockscout.com/stats-service`, same pacer as Blockscout) | Ethereum's daily activity |
-| Postgres | the indexes of Monad and Arc (a `chain` column, one set of tables): indexed tokens, current balances, the largest transfers of each day of the last 7; the links of holder maps (`holder_map`, 7 days) |
+| Blockscout stats services (`eth.blockscout.com/stats-service`, same pacer as Blockscout, and `explorer.arc.io/stats-service`, its own pacer) | the daily activity of Ethereum and Arc |
+| Postgres | the indexes of Monad and Arc (a `chain` column, one set of tables): indexed tokens, current balances, the largest transfers of each day of the last 7; the links of holder maps (`holder_map`, 7 days); Monad's activity by day and the cursor of its count (`chain_stats_day`, `chain_stats_cursor`) |
 
 ### The HyperSync quota
 
@@ -43,6 +43,8 @@ The key allows 15 requests a minute, shared with Sona's x402 indexer, which spen
 One HyperSync request covers about 4,000 to 5,000 Monad blocks (half an hour of chain) wherever a token is active, and only a few dozen Ethereum blocks for a busy token. That is why the index has two modes and the Ethereum window shrinks for busy tokens; `RULES.md` has the details.
 
 Arc adds no request to the quota: its index shares the 3 a minute with Monad's. Each chain's tail sends about 1 request a minute while it holds a ready token, so with both tails running the backfills of both chains share what is left, about 1 a minute, half of what Monad's backfills had alone. Arc's USDC is read from the system emitter, which logs every move of the coin, so it is the busiest feed of the engine and runs in `activity` mode.
+
+Monad's activity count shares the background 3 a minute too: about 190 to 430 requests a day at the head, with no backfill unless `markets.block_stats.backfill_days` is set, which `RULES.md` says needs its own key.
 
 ## API
 
@@ -62,7 +64,7 @@ An address that answers neither `decimals()` nor `totalSupply()` is no token and
 
 ## Configuration
 
-`config/engine.yaml` holds the chains (CAIP-2 id, RPC and HyperSync URLs, GeckoTerminal network, where holders come from, the wrapped native coin, and for an index chain its pre-warm tokens, its own `activity_window_blocks` and the `native` token that is the ERC-20 view of its native coin), the curated token lists and their refresh time, the source URLs and rates, the cache times, the Ethereum transfer window, the holder map (`window_days` 30, `page_budget` 8, `fresh_for` 12 h, `keep_for` 7 days, `queue_max` 20) and the index settings (`max_tokens` 50 per chain, `backfill_budget` 120 requests, `activity_window_blocks` 20,000 and Arc's own 14,400, `tail_interval` 60 s, `lag_blocks` 10, `window_days` 7, `top_per_day` 100; pre-warm USDC and WMON on Monad, USDC and EURC on Arc). A chain without `gecko_network` takes `geckoterminal_network`. It is validated on start, and a key it does not know is an error. Settings from the environment (names in `.env.example`):
+`config/engine.yaml` holds the chains (CAIP-2 id, RPC and HyperSync URLs, GeckoTerminal network, where holders come from, the wrapped native coin, and for an index chain its pre-warm tokens, its own `activity_window_blocks` and the `native` token that is the ERC-20 view of its native coin), the curated token lists and their refresh time, the source URLs and rates, the cache times, the Ethereum transfer window, the count of Monad's activity (`markets.block_stats`: `poll` 10 minutes, `backfill_days` 0, `lag_blocks` 10, and Monad's `system_senders`), the holder map (`window_days` 30, `page_budget` 8, `fresh_for` 12 h, `keep_for` 7 days, `queue_max` 20) and the index settings (`max_tokens` 50 per chain, `backfill_budget` 120 requests, `activity_window_blocks` 20,000 and Arc's own 14,400, `tail_interval` 60 s, `lag_blocks` 10, `window_days` 7, `top_per_day` 100; pre-warm USDC and WMON on Monad, USDC and EURC on Arc). A chain without `gecko_network` takes `geckoterminal_network`. It is validated on start, and a key it does not know is an error. Settings from the environment (names in `.env.example`):
 
 | Variable | Use |
 |---|---|
@@ -116,6 +118,7 @@ Tests need no network. The ones that need Postgres skip unless `TOKENS_TEST_PG` 
 | `internal/cache` | in-memory answers with expiry, one fetch per key at a time |
 | `internal/index` | the index of one chain: the feed of each token, decoding, backfill, mode switch and tail |
 | `internal/holdermap` | holder map links: the build queue, the HyperSync read, pairs and clusters |
+| `internal/chainstats` | Monad's activity counted from HyperSync block pages into days |
 | `internal/store`, `migrations` | Postgres access and embedded SQL |
 | `internal/tokens` | the token records, the curated lists and the search |
 | `internal/server` | HTTP handlers, parameters, problem mapping, metrics |

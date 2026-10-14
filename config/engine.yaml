@@ -104,6 +104,13 @@ markets:
   llama_per_minute: 30
   defi_refresh: 1h
   activity_refresh: 1h
+  # Monad has no keyless stats service, so the engine counts its activity from HyperSync block pages on the background
+  # lane, about 190 to 430 requests a day at the head. backfill_days stays 0 here, because 90 days are about 17,000 to
+  # 38,000 requests, which need their own key or a budget decision on the server
+  block_stats:
+    poll: 10m
+    backfill_days: 0
+    lag_blocks: 10
   chains:
     - id: "eip155:1"
       llama_name: Ethereum
@@ -111,6 +118,10 @@ markets:
       # activity reads stats_url's /stats-service, blockscout_url when it is unset; fees_metric is fees_eth unless set
     - id: "eip155:143"
       llama_name: Monad
+      activity: true
+      activity_source: blocks
+      # the sender of the one system transaction every Monad block opens with
+      system_senders: ["0x6f49a8f621353f12378d0046e7d7e4b9b249dc9e"]
     # DefiLlama's chain names are case-sensitive
     # Arc's explorer has its own Blockscout stats service, keyless like Ethereum's. USDC is Arc's gas coin, so its fee line is fees_usdc
     - id: "eip155:5042"

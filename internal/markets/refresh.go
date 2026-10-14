@@ -237,6 +237,9 @@ func (s *Service) RefreshActivity(ctx context.Context) error {
 		series := make([]Series, 0, len(activityLines))
 		for _, l := range activityLines {
 			pts, err := stats.StatsLine(ctx, l.id, from, to)
+			if errors.Is(err, ErrNoStatsLine) {
+				continue
+			}
 			if err != nil {
 				c.activity.fail(err)
 				return err

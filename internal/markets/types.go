@@ -13,6 +13,8 @@ var (
 	ErrUnsupportedChain = errors.New("the chain has no market data")
 	// ErrNoActivity is a chain whose activity statistics are not wired
 	ErrNoActivity = errors.New("the chain has no activity statistics")
+	// ErrNoStatsLine is a line the chain's stats source does not keep, the activity record leaves its series out
+	ErrNoStatsLine = errors.New("the stats source does not keep this line")
 )
 
 // Record kinds
@@ -33,17 +35,18 @@ type Note struct {
 
 // The coverage codes of these records
 var (
-	CovTopCoinsStale   = Note{"market_top_coins_stale", "CoinGecko's market list could not be refreshed for over 15 minutes, so the prices are older than 5 minutes."}
-	CovTokenMapMissing = Note{"market_token_map_unavailable", "CoinGecko's list of contract addresses has not loaded, or could not be refreshed for over 3 days, so tokens may be empty or out of date."}
-	CovDefiStale       = Note{"chain_defi_stale", "DefiLlama could not be refreshed for over 3 hours, so the figures are older than an hour."}
-	CovActivityStale   = Note{"chain_activity_stale", "Blockscout's stats service could not be refreshed for over 3 hours, so the figures are older than an hour."}
-	CovLastDayPartial  = Note{"chain_series_last_day_partial", "The last item is the current UTC day, still in progress, so it is lower than a full day and moves between reads."}
-	CovNotAdditive     = Note{"chain_protocols_not_additive", "Each tvl_usd is a protocol's own TVL on the chain. DefiLlama's chain TVL leaves out double counting between protocols, so the rows do not add up to it."}
-	CovChangeGlobal    = Note{"chain_protocol_change_all_chains", "change_1d_pct and change_7d_pct are DefiLlama's changes of the protocol's TVL on all its chains, not on this chain."}
+	CovTopCoinsStale      = Note{"market_top_coins_stale", "CoinGecko's market list could not be refreshed for over 15 minutes, so the prices are older than 5 minutes."}
+	CovTokenMapMissing    = Note{"market_token_map_unavailable", "CoinGecko's list of contract addresses has not loaded, or could not be refreshed for over 3 days, so tokens may be empty or out of date."}
+	CovDefiStale          = Note{"chain_defi_stale", "DefiLlama could not be refreshed for over 3 hours, so the figures are older than an hour."}
+	CovActivityStale      = Note{"chain_activity_stale", "The activity source could not be read for over 3 hours, so the figures are older than an hour."}
+	CovActivityFromBlocks = Note{"chain_activity_from_blocks", "Sona counts this chain's activity from its blocks and transactions, without the chain's system transactions. Blocks do not say which accounts are active or new, and the fees are not counted, so those series are left out."}
+	CovLastDayPartial     = Note{"chain_series_last_day_partial", "The last item is the current UTC day, still in progress, so it is lower than a full day and moves between reads."}
+	CovNotAdditive        = Note{"chain_protocols_not_additive", "Each tvl_usd is a protocol's own TVL on the chain. DefiLlama's chain TVL leaves out double counting between protocols, so the rows do not add up to it."}
+	CovChangeGlobal       = Note{"chain_protocol_change_all_chains", "change_1d_pct and change_7d_pct are DefiLlama's changes of the protocol's TVL on all its chains, not on this chain."}
 )
 
 // AllNotes is every coverage code of these records
-var AllNotes = []Note{CovTopCoinsStale, CovTokenMapMissing, CovDefiStale, CovActivityStale, CovLastDayPartial, CovNotAdditive, CovChangeGlobal}
+var AllNotes = []Note{CovTopCoinsStale, CovTokenMapMissing, CovDefiStale, CovActivityStale, CovActivityFromBlocks, CovLastDayPartial, CovNotAdditive, CovChangeGlobal}
 
 func codes(ns ...Note) []string {
 	out := make([]string, 0, len(ns))

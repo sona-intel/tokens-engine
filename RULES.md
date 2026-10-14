@@ -134,7 +134,7 @@ All come from DefiLlama's keyless APIs (`api.llama.fi`, `stablecoins.llama.fi`),
 
 ### Activity
 
-`GET /internal/v1/chains/eip155:1/activity` reads Blockscout's stats service (`eth.blockscout.com/stats-service/api/v1/lines/{id}`, `from` 364 days before today to today), six requests an hour through the same Blockscout pacer as the token routes (3 a second, at the background priority). `GET /internal/v1/chains/eip155:5042/activity` reads Arc's own stats service (`explorer.arc.io/stats-service/api/v1/lines/{id}`, keyless; its `/api/v2` is behind Cloudflare but this path is not), the same six lines over the same year, through its own pacer (3 a second) because it is another host. Both are kept an hour. Monad answers 404 `unsupported_chain` because no source is wired for it. Per chain, `activity`, `stats_url` and `fees_metric` in `markets.chains` choose the source and the name of the fee series.
+`GET /internal/v1/chains/eip155:1/activity` reads Blockscout's stats service (`eth.blockscout.com/stats-service/api/v1/lines/{id}`, `from` 364 days before today to today), six requests an hour through the same Blockscout pacer as the token routes (3 a second, at the background priority). `GET /internal/v1/chains/eip155:5042/activity` reads Arc's own stats service (`explorer.arc.io/stats-service/api/v1/lines/{id}`, keyless; its `/api/v2` is behind Cloudflare but this path is not), the same six lines over the same year, through its own pacer (3 a second) because it is another host. Both are kept an hour. Monad has no stats service, so the engine counts it from its blocks (below). Per chain, `activity`, `stats_url`, `fees_metric` and `activity_source` in `markets.chains` choose the source and the name of the fee series.
 
 | Metric | Line id | Unit as sent | Output |
 |---|---|---|---|
@@ -149,6 +149,26 @@ On Arc the fee series is `fees_usdc` instead of `fees_eth`: USDC is the gas coin
 
 The utilization line has no unit in the service's description; it was read as a fraction because its days sit at 0.504 and Blockscout's own `/api/v2/stats` and blocks give 52.8% and 54% to 81% on the same day. `days` keeps the last N days.
 
+### Monad's activity, counted from its blocks
+
+No keyless source has Monad's daily stats. Monad has no Blockscout instance, MonadVision and SocialScan answer bots with a challenge, and Etherscan's daily stats (`module=stats&action=dailytx` and the rest, chain 143) answer "API Pro endpoint" with a free key (checked 2026-10-14). So the engine counts Monad itself (`activity_source: blocks`, package `internal/chainstats`).
+
+It reads HyperSync block pages on the background lane. A page has every block from the cursor with `number`, `timestamp`, `gas_used` and `gas_limit`, and every transaction's `block_number`, `from` and `gas_price` (`include_all_blocks` and one empty transaction selection). The engine refuses a page that lacks a block between its start and `next_block`. It adds a page's sums to `chain_stats_day`, by the UTC day of each block's time, in the same transaction that moves `chain_stats_cursor`, and refuses a page that no longer starts at the cursor, so no block counts twice. The hourly markets refresh reads those days.
+
+| Metric | From a counted day |
+|---|---|
+| `txs` | the transactions, without the system ones. Monad opens every block with one transaction from `0x6f49a8f621353f12378d0046e7d7e4b9b249dc9e` at gas price 0 (`system_senders`), the chain's own, which is left out |
+| `gas_price_gwei` | the mean `gas_price` of those transactions, in gwei. HyperSync's `gas_price` is the price paid: it equalled `effective_gas_price` on all 701 transactions of a sample |
+| `utilization_pct` | the day's gas used over its gas limit, times 100. Every Monad block has the same gas limit (150,000,000), so this equals the mean of each block's share, which Blockscout reports |
+
+`active_accounts`, `new_accounts` and the fees are left out, and the record says so with `chain_activity_from_blocks`. New accounts need every sender since genesis, and active accounts a set of each day's senders kept across pages. Monad charges the gas limit rather than the gas used, so fees would need each transaction's limit and price and a rule this engine does not have.
+
+The day of the first block counted began before the count, so it is never served. With `backfill_days` 0 the count starts one block below the head, and the series stay empty until the next UTC day. With `backfill_days` N it starts before the midnight N days back: two one-block probes 1,000,000 blocks apart give the blocks a second, and the start goes 5% further back, so N whole days are served.
+
+**Cost.** A block page held 676 Monad blocks at 10:12 UTC and about 1,500 at 17:00 UTC on 2026-10-14: an hour of 12,000 blocks took 8 requests. Following the head (`poll` 10 minutes, `lag_blocks` 10) costs about 190 to 430 requests a day on the background lane, which allows 3 a minute for every background job of the engine. A 90-day backfill is about 17,000 to 38,000 requests, 4 to 9 days of the whole lane, while the index backfills wait. So `backfill_days` stays 0 in `config/engine.yaml` and is never run on a development machine. Before it is set on the server, it needs its own HyperSync key or a decision on that budget.
+
+**Checked.** The 40 recorded blocks (113,178,240 to 113,178,279, across midnight of 2026-10-14) have the same transaction count, gas used and time in `eth_getBlockByNumber` through the router. An hour counted live on 2026-10-14 gave 195,302 transactions, 111.08 gwei and 8.03%, against Monad's base fee of 100 gwei.
+
 ### Coverage codes of these records
 
 | Code | Meaning |
@@ -156,7 +176,8 @@ The utilization line has no unit in the service's description; it was read as a 
 | `market_top_coins_stale` | the CoinGecko list is over 15 minutes old because its refresh keeps failing |
 | `market_token_map_unavailable` | the address map has not loaded, or is over 3 days old, so `tokens` can be empty or out of date |
 | `chain_defi_stale` | the DefiLlama copy is over 3 hours old |
-| `chain_activity_stale` | the Blockscout stats copy is over 3 hours old |
+| `chain_activity_stale` | the copy of the activity source is over 3 hours old |
+| `chain_activity_from_blocks` | Sona counts the chain's activity from its blocks, so the account and fee series are missing (Monad) |
 | `chain_series_last_day_partial` | the last item is the current UTC day |
 | `chain_protocols_not_additive` | protocol rows do not sum to the chain's TVL |
 | `chain_protocol_change_all_chains` | protocol changes are those on all chains |

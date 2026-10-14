@@ -134,7 +134,7 @@ func newMarkets(t testing.TB, key string, arc bool) (*markets.Service, *MarketFa
 		Config:    cfg,
 		CoinGecko: sources.NewCoinGecko(srv.URL+"/cg", f.CoinKey, cfg.CoinGeckoGap).WithHTTPClient(srv.Client()),
 		Llama:     sources.NewLlama(srv.URL+"/llama", srv.URL+"/stable", cfg.LlamaPerMinute).WithHTTPClient(srv.Client()),
-		Stats: map[string]*sources.Blockscout{
+		Stats: map[string]markets.StatsSource{
 			Ethereum: sources.NewBlockscout(srv.URL, 1000).WithHTTPClient(srv.Client()),
 			Arc:      sources.NewBlockscout(srv.URL+"/arc", 1000).WithHTTPClient(srv.Client()),
 		},

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"tokens/internal/config"
 	"tokens/internal/sources"
 )
 
@@ -181,10 +182,13 @@ func (s *Service) ChainActivity(_ context.Context, chain string, days int) (Chai
 		}
 		out.Series = append(out.Series, Series{Metric: sr.Metric, Items: items})
 	}
-	notes := []Note{CovLastDayPartial}
+	notes := []Note{}
 	if s.stale(at, s.d.Config.ActivityRefresh) {
-		notes = []Note{CovActivityStale, CovLastDayPartial}
+		notes = append(notes, CovActivityStale)
 	}
-	out.Coverage = codes(notes...)
+	if c.cfg.ActivitySource == config.ActivityBlocks {
+		notes = append(notes, CovActivityFromBlocks)
+	}
+	out.Coverage = codes(append(notes, CovLastDayPartial)...)
 	return out, nil
 }

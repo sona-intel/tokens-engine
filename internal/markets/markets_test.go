@@ -1,12 +1,14 @@
 package markets_test
 
 import (
+	"context"
 	"encoding/json/v2"
 	"errors"
 	"slices"
 	"testing"
 	"time"
 
+	"tokens/internal/config"
 	"tokens/internal/fixture"
 	"tokens/internal/markets"
 	"tokens/internal/sources"
@@ -386,5 +388,47 @@ func TestArcActivity(t *testing.T) {
 		if p := last(i); p.Day != "2026-10-13" || p.Value != want {
 			t.Errorf("%s: %v, want 2026-10-13 %v", got.Series[i].Metric, p, want)
 		}
+	}
+}
+
+// blockLines keeps the three lines a count from blocks gives, as chainstats does
+type blockLines map[string]float64
+
+func (b blockLines) StatsLine(_ context.Context, id, _, _ string) ([]sources.StatPoint, error) {
+	v, ok := b[id]
+	if !ok {
+		return nil, markets.ErrNoStatsLine
+	}
+	return []sources.StatPoint{{Day: "2026-10-13", Value: v}, {Day: "2026-10-14", Value: v}}, nil
+}
+
+func TestActivityCountedFromBlocksLeavesTheOtherSeriesOut(t *testing.T) {
+	cfg := fixture.MarketsConfig()
+	cfg.Chains = []config.MarketChain{{ID: fixture.Monad, LlamaName: "Monad", Activity: true, ActivitySource: config.ActivityBlocks}}
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	s := markets.New(markets.Deps{
+		Config: cfg,
+		Stats:  map[string]markets.StatsSource{fixture.Monad: blockLines{"newTxns": 1500000, "averageGasPrice": 112.5, "networkUtilization": 0.0425}},
+		Now:    func() time.Time { return now },
+	})
+	if err := s.RefreshActivity(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ChainActivity(t.Context(), fixture.Monad, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metrics []string
+	for _, sr := range got.Series {
+		metrics = append(metrics, sr.Metric)
+	}
+	if !slices.Equal(metrics, []string{"txs", "gas_price_gwei", "utilization_pct"}) {
+		t.Fatalf("metrics %v", metrics)
+	}
+	if v := got.Series[2].Items[1]; v.Day != "2026-10-14" || v.Value != 4.25 {
+		t.Errorf("utilization %v", v)
+	}
+	if !slices.Equal(got.Coverage, []string{"chain_activity_from_blocks", "chain_series_last_day_partial"}) {
+		t.Errorf("coverage %v", got.Coverage)
 	}
 }

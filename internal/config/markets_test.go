@@ -17,8 +17,15 @@ func TestMarketsConfig(t *testing.T) {
 	if m.CoinGeckoGap != 20*time.Second || m.TopCoinsRefresh != 5*time.Minute || m.DefiRefresh != time.Hour || len(m.Chains) != 3 {
 		t.Fatalf("markets %+v", m)
 	}
-	if c, ok := m.Chain("eip155:143"); !ok || c.LlamaName != "Monad" || c.Activity {
+	if c, ok := m.Chain("eip155:143"); !ok || c.LlamaName != "Monad" || !c.Activity || c.ActivitySource != ActivityBlocks ||
+		len(c.SystemSenders) != 1 || c.SystemSenders[0].String() != "0x6f49a8f621353f12378d0046e7d7e4b9b249dc9e" {
 		t.Errorf("monad %+v", c)
+	}
+	if b := m.BlockStats; b.Poll != 10*time.Minute || b.BackfillDays != 0 || b.LagBlocks != 10 || !m.CountsBlocks() {
+		t.Errorf("block stats %+v", b)
+	}
+	if c, _ := m.Chain("eip155:5042"); c.ActivitySource != "" || len(c.SystemSenders) != 0 {
+		t.Errorf("arc counts its blocks %+v", c)
 	}
 	if c, ok := m.Chain("eip155:1"); !ok || c.LlamaName != "Ethereum" || !c.Activity {
 		t.Errorf("ethereum %+v", c)
@@ -45,6 +52,16 @@ func TestMarketsConfigRefusals(t *testing.T) {
 		{"llama_per_minute: 30", "llama_per_minute: 0"},
 		{"    - id: \"eip155:1\"\n      llama_name: Ethereum", "    - id: \"eip155:9\"\n      llama_name: Ethereum"},
 		{"llama_name: Monad", "llama_name: Ethereum"},
+		{"activity_source: blocks", "activity_source: rpc"},
+		{"      llama_name: Monad\n      activity: true", "      llama_name: Monad\n      activity: false"},
+		{"system_senders: [\"0x6f49a8f621353f12378d0046e7d7e4b9b249dc9e\"]", "system_senders: [\"0x6f49\"]"},
+		{"      activity_source: blocks\n      # the sender of the one system transaction every Monad block opens with\n      system_senders: [\"0x6f49a8f621353f12378d0046e7d7e4b9b249dc9e\"]\n", ""},
+		{"poll: 10m", "poll: 30s"},
+		{"backfill_days: 0", "backfill_days: 366"},
+		{"backfill_days: 0", "backfill_days: -1"},
+		{"lag_blocks: 10\n  chains", "lag_blocks: 0\n  chains"},
+		{"      activity_source: blocks\n", "      stats_url: https://explorer.arc.io\n      activity_source: blocks\n"},
+		{"    - id: \"eip155:5042\"\n      llama_name: Arc\n", "    - id: \"eip155:5042\"\n      llama_name: Arc\n      system_senders: [\"0x6f49a8f621353f12378d0046e7d7e4b9b249dc9e\"]\n"},
 	} {
 		if !strings.Contains(base, c[0]) {
 			t.Fatalf("the repo config lacks %q", c[0])

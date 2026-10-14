@@ -75,7 +75,7 @@ func marketErr(err error) error {
 	case errors.Is(err, markets.ErrUnsupportedChain):
 		return &httpError{problem.CodeUnsupportedChain, "Only eip155:1, eip155:143 and eip155:5042 have market data."}
 	case errors.Is(err, markets.ErrNoActivity):
-		return &httpError{problem.CodeUnsupportedChain, "Chain activity comes from Blockscout's stats service, and no keyless source is wired for this chain. Only eip155:1 and eip155:5042 have it."}
+		return &httpError{problem.CodeUnsupportedChain, "No activity source is wired for this chain. Only eip155:1, eip155:143 and eip155:5042 have it."}
 	}
 	return err
 }

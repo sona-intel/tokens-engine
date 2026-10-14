@@ -84,13 +84,18 @@ type chainSlots struct {
 	activity  slot[[]Series]
 }
 
+// StatsSource reads a daily activity line by its Blockscout stats id, Blockscout's own service or the engine's count of a chain's blocks
+type StatsSource interface {
+	StatsLine(ctx context.Context, id, from, to string) ([]sources.StatPoint, error)
+}
+
 // Deps are the sources and the clock of the service
 type Deps struct {
 	Config    config.Markets
 	CoinGecko *sources.CoinGecko
 	Llama     *sources.Llama
-	// Stats is the Blockscout stats service of each chain with activity, by chain id
-	Stats  map[string]*sources.Blockscout
+	// Stats is the stats source of each chain with activity, by chain id
+	Stats  map[string]StatsSource
 	Now    func() time.Time
 	Logger *slog.Logger
 }

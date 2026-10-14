@@ -11,6 +11,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"tokens/internal/chainstats"
 	"tokens/internal/config"
 	"tokens/internal/holdermap"
 	"tokens/internal/index"
@@ -38,6 +39,8 @@ type App struct {
 	// Indexers keep the holder index of every chain whose holders come from it, in the order of the config
 	Indexers []*index.Indexer
 	maps     *holdermap.Builder
+	// counters count the activity of the chains that have no stats service from their blocks
+	counters []*chainstats.Counter
 
 	mu      sync.Mutex
 	readyAt time.Time
@@ -82,10 +85,17 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 	}
 	blockscout := sources.NewBlockscout(cfg.BlockscoutURL, cfg.BlockscoutPerSecond)
 	// every stats host gets its own pacer, the chains that name no stats_url use the Blockscout of the token routes
-	stats := map[string]*sources.Blockscout{}
+	stats := map[string]markets.StatsSource{}
 	for _, mc := range cfg.Markets.Chains {
 		switch {
 		case !mc.Activity:
+		case mc.ActivitySource == config.ActivityBlocks:
+			if !hs.Enabled() {
+				return nil, fmt.Errorf("the activity of %s is counted from its blocks and needs ENVIO_HYPERSYNC_KEY", mc.ID)
+			}
+			ct := chainstats.New(mc, cfg.Markets.BlockStats, hs, d.Store, d.Logger.With("chain", mc.ID))
+			a.counters = append(a.counters, ct)
+			stats[mc.ID] = ct
 		case mc.StatsURL == "":
 			stats[mc.ID] = blockscout
 		default:
@@ -175,7 +185,7 @@ func (a *App) Ready(ctx context.Context) bool {
 	return a.ready
 }
 
-// Run runs the indexes, the holder map builds and the token list refresh until ctx ends
+// Run runs the indexes, the activity counts, the holder map builds and the token list refresh until ctx ends
 func (a *App) Run(ctx context.Context) {
 	go a.lists.Run(ctx)
 	go a.marketService.Run(ctx)
@@ -183,6 +193,9 @@ func (a *App) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, x := range a.Indexers {
 		wg.Go(func() { x.Run(ctx, a.Decimals(x.Chain())) })
+	}
+	for _, ct := range a.counters {
+		wg.Go(func() { ct.Run(ctx) })
 	}
 	<-ctx.Done()
 	wg.Wait()
