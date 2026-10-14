@@ -425,3 +425,19 @@ func TestArcUSDCActivityReadsNativeBalances(t *testing.T) {
 		t.Errorf("%d balances and %d holders, want %d", len(have), got.Holders, n)
 	}
 }
+
+type hangingLogs struct{ fakeLogs }
+
+func (*hangingLogs) Height(ctx context.Context, _ string) (uint64, error) {
+	<-ctx.Done()
+	return 0, ctx.Err()
+}
+
+// the first HyperSync connection can take 10 seconds, a visitor must not wait for it
+func TestHeadGivesUpQuickly(t *testing.T) {
+	x := New(config.Chain{ID: "eip155:143"}, config.Index{}, nil, &hangingLogs{}, nil, slog.Default())
+	start := time.Now()
+	if h := x.Head(t.Context()); h != 0 || time.Since(start) > 5*time.Second {
+		t.Fatalf("head %d after %v", h, time.Since(start))
+	}
+}

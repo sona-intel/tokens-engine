@@ -25,6 +25,8 @@ const (
 	pruneEvery = time.Hour
 	// overPages is how many pages in a row must project past the budget, so one busy day does not end a full backfill
 	overPages = 2
+	// headWait is the longest a visitor's request waits for the archive height before it answers without it
+	headWait = 1500 * time.Millisecond
 )
 
 // Logs is the HyperSync client
@@ -102,6 +104,9 @@ func (x *Indexer) Current() *Progress { return x.current.Load() }
 
 // Head is the last archive height HyperSync reported, it asks again when the copy is old
 func (x *Indexer) Head(ctx context.Context) uint64 {
+	// a visitor's request never waits long for the height: the first call to HyperSync can take 10 seconds to connect
+	ctx, cancel := context.WithTimeout(ctx, headWait)
+	defer cancel()
 	h, err := x.height(ctx)
 	if err != nil {
 		x.mu.Lock()
@@ -154,6 +159,8 @@ func (x *Indexer) safeHead(ctx context.Context) (uint64, error) {
 // Run queues the pre-warm tokens, then runs the backfill worker and the tail until ctx ends
 func (x *Indexer) Run(ctx context.Context, decimals func(context.Context, evm.Address) (uint8, error)) {
 	var wg sync.WaitGroup
+	// the first connection to HyperSync is slow, so open it before a visitor needs the height
+	wg.Go(func() { _, _ = x.height(ctx) })
 	wg.Go(func() { x.prewarm(ctx, decimals) })
 	wg.Go(func() { x.worker(ctx) })
 	wg.Go(func() { x.tailLoop(ctx) })
