@@ -72,6 +72,19 @@ func TestRepoConfigLoads(t *testing.T) {
 	}
 }
 
+func TestRPCPacingDefaults(t *testing.T) {
+	base := repoConfig(t)
+	cfg, err := Load(write(t, base))
+	if err != nil || cfg.MulticallMaxCalls != 100 || cfg.RPCBackgroundPerSecond != 2 {
+		t.Fatalf("repo config: %+v %v", cfg, err)
+	}
+	stripped := strings.NewReplacer("multicall_max_calls: 100\n", "", "rpc_background_per_second: 2\n", "").Replace(base)
+	cfg, err = Load(write(t, stripped))
+	if err != nil || cfg.MulticallMaxCalls != 100 || cfg.RPCBackgroundPerSecond != 2 {
+		t.Fatalf("defaults: %+v %v", cfg, err)
+	}
+}
+
 func TestEnvironmentWins(t *testing.T) {
 	t.Setenv("TOKENS_RPC_MONAD", "http://127.0.0.1:4000/sona/monad")
 	t.Setenv("TOKENS_PRICES_URL", "http://127.0.0.1:8210")
@@ -104,6 +117,10 @@ func TestInvalidConfigs(t *testing.T) {
 		"window of no days":     {"window_days: 7", "window_days: 0"},
 		"bad wrapped native":    {`wrapped_native: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"`, `wrapped_native: "0x12"`},
 		"min above the window":  {"transfer_min_blocks: 20", "transfer_min_blocks: 9000"},
+		"batch of 300":          {"multicall_max_calls: 100", "multicall_max_calls: 300"},
+		"negative batch":        {"multicall_max_calls: 100", "multicall_max_calls: -1"},
+		"background too fast":   {"rpc_background_per_second: 2", "rpc_background_per_second: 5"},
+		"background negative":   {"rpc_background_per_second: 2", "rpc_background_per_second: -1"},
 		"gecko past its limit":  {"geckoterminal_per_minute: 20", "geckoterminal_per_minute: 40"},
 	}
 	for name, c := range cases {

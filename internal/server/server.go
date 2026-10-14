@@ -24,6 +24,7 @@ import (
 
 	"tokens/internal/evm"
 	"tokens/internal/problem"
+	"tokens/internal/rpc"
 	"tokens/internal/sources"
 	"tokens/internal/tokens"
 )
@@ -206,7 +207,7 @@ func (a *app) serve(h endpoint, tokenRoute bool) http.HandlerFunc {
 				return
 			}
 		}
-		ctx, cancel := context.WithTimeout(req.Context(), budget)
+		ctx, cancel := context.WithTimeout(rpc.WithVisitor(req.Context()), budget)
 		defer cancel()
 		c.ctx = ctx
 		body, err := h(c)

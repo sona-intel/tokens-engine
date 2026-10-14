@@ -36,6 +36,13 @@ chains:
       - "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1" # EURC
 # X-ERPC-Use-Upstream on every JSON-RPC request, so the router never uses its paid dRPC upstreams
 rpc_upstream_filter: "!drpc-*"
+# Multicall3 aggregate3 carries at most this many calls (1 to 100): the router's per-upstream budgets drop upstreams that get batches of 300
+multicall_max_calls: 100
+# eth_call lanes, per chain. The background lane (index balanceOf reads, Arc getEthBalance checks of the index, pre-warm, every call
+# no visitor's request caused) sends at most this many requests a second with 1 in flight (above 0, at most 2).
+# The visitor lane (ensure-token contract reads and shown-balance checks of a visitor's request) goes first, never waits behind
+# background calls and is burst-limited to 5 a second per chain; it keeps the request's own deadline.
+rpc_background_per_second: 2
 blockscout_url: https://eth.blockscout.com
 blockscout_per_second: 3
 geckoterminal_url: https://api.geckoterminal.com/api/v2

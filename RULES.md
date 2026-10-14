@@ -33,7 +33,7 @@ Each of the two chains has its own index, with the same rules and settings unles
 
 A backfill starts at block 0 in **`full` mode**: each page of logs adds `+amount` to the receiver and `-amount` to the sender, committed with the page's end block in one transaction, so a restart resumes where it stopped. Balances in this mode are exact for any token that only changes balances through these events (`token_balances_from_transfers`); a rebasing or fee-taking token drifts from `balanceOf`.
 
-One HyperSync request covers what the server can scan in one go: about 4,000 to 5,000 Monad blocks wherever the token is active. After every page the engine projects the requests the rest of the backfill needs, `spent + (head - next_block) / blocks of the latest page`. When two pages in a row project past `backfill_budget` (120), the token switches to **`activity` mode**: its rows are cleared, the index starts again `activity_window_blocks` (20,000 Monad blocks, 14,400 Arc blocks, about two hours on each) before the head, and from then on every address a page touches gets its balance read with `balanceOf` at the latest block, in Multicall3 batches of 300. The list then holds every address that moved the token since `start_block`, with its exact current balance, and misses holders that have not moved it since (`token_holders_from_activity`). On 2026-10-13 USDC projected 368 and 892 requests in two runs, each after 3 or 4 pages, and WMON 266, so both run in `activity` mode. The projection reads the latest page only; sampled ranges of USDC's history cover 4,000 to 5,600 blocks a request from block 37M on, so a full USDC backfill would take about 17,000 requests, more than 18 hours of the whole key.
+One HyperSync request covers what the server can scan in one go: about 4,000 to 5,000 Monad blocks wherever the token is active. After every page the engine projects the requests the rest of the backfill needs, `spent + (head - next_block) / blocks of the latest page`. When two pages in a row project past `backfill_budget` (120), the token switches to **`activity` mode**: its rows are cleared, the index starts again `activity_window_blocks` (20,000 Monad blocks, 14,400 Arc blocks, about two hours on each) before the head, and from then on every address a page touches gets its balance read with `balanceOf` at the latest block, in Multicall3 batches of at most 100 calls (`multicall_max_calls`). The list then holds every address that moved the token since `start_block`, with its exact current balance, and misses holders that have not moved it since (`token_holders_from_activity`). On 2026-10-13 USDC projected 368 and 892 requests in two runs, each after 3 or 4 pages, and WMON 266, so both run in `activity` mode. The projection reads the latest page only; sampled ranges of USDC's history cover 4,000 to 5,600 blocks a request from block 37M on, so a full USDC backfill would take about 17,000 requests, more than 18 hours of the whole key.
 
 After the backfill the **tail** keeps every ready token current: once a minute one HyperSync query per chain for all of its tokens, from the lowest `next_block` to 10 blocks behind the archive height, each token applying only the logs at or after its own `next_block`.
 
@@ -158,6 +158,17 @@ The utilization line has no unit in the service's description; it was read as a 
 | `chain_series_last_day_partial` | the last item is the current UTC day |
 | `chain_protocols_not_additive` | protocol rows do not sum to the chain's TVL |
 | `chain_protocol_change_all_chains` | protocol changes are those on all chains |
+
+## RPC lanes
+
+Every Multicall3 `aggregate3` carries at most `multicall_max_calls` (100) calls; a longer list is split into batches of 100. The router's per-upstream budgets dropped upstreams that got batches of 300, and a visitor's small read then failed.
+
+Each chain paces its `eth_call` requests in two lanes (`internal/rpc/pacing.go`, built like the HyperSync pacer's priorities). The lane is a value of the request context: `rpc.WithVisitor(ctx)` marks it, and the HTTP server marks every request it serves, so every call a context without the mark makes is background.
+
+- **Background lane.** Index work: activity-mode `balanceOf` reads, Arc's native-balance checks of the index (`getEthBalance`), pre-warm, and anything else no visitor's request caused. At most `rpc_background_per_second` (2) requests a second on each chain, with 1 request in flight at a time. A call that waits ends with its context.
+- **Visitor lane.** The calls a visitor's request triggers: the contract read of ensure-token and the native-balance check of the balances shown. It has its own bucket of 5 requests a second on each chain, so it never waits behind a background call, and a call waits only for its request's own deadline.
+
+Only `eth_call` is paced, and `X-ERPC-Use-Upstream: !drpc-*` stays on every request in both lanes.
 
 ## Limits
 

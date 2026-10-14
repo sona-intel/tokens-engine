@@ -92,7 +92,7 @@ func serve(ctx context.Context) error {
 
 	clients := map[string]*rpc.Client{}
 	for _, c := range cfg.Chains {
-		client, err := newChain(c, cfg.RPCUpstreamFilter)
+		client, err := newChain(c, cfg)
 		if err != nil {
 			return fmt.Errorf("rpc client %s: %w", c.ID, err)
 		}
@@ -114,12 +114,13 @@ func serve(ctx context.Context) error {
 	return err
 }
 
-func newChain(c config.Chain, filter string) (*rpc.Client, error) {
-	return rpc.New(c.RPCURL, rpc.WithUpstreamFilter(filter), rpc.WithOnCredits(func(method, header string, paid bool) {
-		if paid {
-			slog.Warn("paid rpc call", "chain", c.ID, "method", method, "credits", header)
-		}
-	}))
+func newChain(c config.Chain, cfg config.Config) (*rpc.Client, error) {
+	return rpc.New(c.RPCURL, rpc.WithUpstreamFilter(cfg.RPCUpstreamFilter), rpc.WithMaxCalls(cfg.MulticallMaxCalls),
+		rpc.WithPacer(rpc.NewPacer(cfg.RPCBackgroundPerSecond)), rpc.WithOnCredits(func(method, header string, paid bool) {
+			if paid {
+				slog.Warn("paid rpc call", "chain", c.ID, "method", method, "credits", header)
+			}
+		}))
 }
 
 func migrate(ctx context.Context) error {

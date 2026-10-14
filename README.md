@@ -25,7 +25,7 @@ The engine only reads. It holds no wallet or private key and signs nothing. Its 
 
 | Source | Used for |
 |---|---|
-| JSON-RPC (in the Sona stack the RPC router, `http://rpc-router:4000/sona/{ethereum,monad,arc}`) | `name`, `symbol`, `decimals` and `totalSupply` in one Multicall3 `aggregate3` call, `balanceOf` batches for the indexes, Multicall3 `getEthBalance` batches for Arc's USDC, block times. Every request carries `X-ERPC-Use-Upstream: !drpc-*`, so the router never uses its paid dRPC upstreams, and the engine counts any call the router still billed |
+| JSON-RPC (in the Sona stack the RPC router, `http://rpc-router:4000/sona/{ethereum,monad,arc}`) | `name`, `symbol`, `decimals` and `totalSupply` in one Multicall3 `aggregate3` call, `balanceOf` batches for the indexes, Multicall3 `getEthBalance` batches for Arc's USDC (at most 100 calls a batch, paced per chain in a visitor lane and a background lane of 2 requests a second, see RULES), block times. Every request carries `X-ERPC-Use-Upstream: !drpc-*`, so the router never uses its paid dRPC upstreams, and the engine counts any call the router still billed |
 | Sona's prices service (`http://prices:8080`) | the current price, from its 1-day chart |
 | Blockscout (`eth.blockscout.com`, keyless, at most 3 requests a second) | Ethereum: holder count, circulating market cap, holder pages |
 | GeckoTerminal (`api.geckoterminal.com`, keyless, at most 20 requests a minute) | Monad and Arc (networks `monad` and `arc`): holder count, top 10 share, market cap, logo. Every chain: the pool search behind the token search |

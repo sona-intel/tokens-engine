@@ -89,32 +89,35 @@ type Index struct {
 }
 
 type Config struct {
-	Chains               []Chain
-	RPCUpstreamFilter    string
-	BlockscoutURL        string
-	BlockscoutPerSecond  float64
-	GeckoURL             string
-	GeckoNetwork         string
-	GeckoPerMinute       float64
-	PricesURL            string
-	HyperSyncPerMinute   float64
-	HyperSyncInteractive float64
-	HyperSyncKey         Secret
-	MetaCache            time.Duration
-	HoldersCache         time.Duration
-	GeckoCache           time.Duration
-	TransfersCache       time.Duration
-	PriceCache           time.Duration
-	SearchCache          time.Duration
-	TokenLists           []TokenList
-	TokenListRefresh     time.Duration
-	TokenListTimeout     time.Duration
-	TransferWindowBlocks uint64
-	TransferMinBlocks    uint64
-	TransferPageBudget   int
-	Index                Index
-	Markets              Markets
-	HolderMap            HolderMap
+	Chains            []Chain
+	RPCUpstreamFilter string
+	// MulticallMaxCalls is the most calls in one aggregate3, RPCBackgroundPerSecond the eth_call requests a second per chain for background work
+	MulticallMaxCalls      int
+	RPCBackgroundPerSecond float64
+	BlockscoutURL          string
+	BlockscoutPerSecond    float64
+	GeckoURL               string
+	GeckoNetwork           string
+	GeckoPerMinute         float64
+	PricesURL              string
+	HyperSyncPerMinute     float64
+	HyperSyncInteractive   float64
+	HyperSyncKey           Secret
+	MetaCache              time.Duration
+	HoldersCache           time.Duration
+	GeckoCache             time.Duration
+	TransfersCache         time.Duration
+	PriceCache             time.Duration
+	SearchCache            time.Duration
+	TokenLists             []TokenList
+	TokenListRefresh       time.Duration
+	TokenListTimeout       time.Duration
+	TransferWindowBlocks   uint64
+	TransferMinBlocks      uint64
+	TransferPageBudget     int
+	Index                  Index
+	Markets                Markets
+	HolderMap              HolderMap
 }
 
 // Chain returns the chain with this CAIP-2 id
@@ -204,31 +207,33 @@ type indexFile struct {
 }
 
 type file struct {
-	Chains               []chainFile     `yaml:"chains"`
-	RPCUpstreamFilter    *string         `yaml:"rpc_upstream_filter"`
-	BlockscoutURL        string          `yaml:"blockscout_url"`
-	BlockscoutPerSecond  float64         `yaml:"blockscout_per_second"`
-	GeckoURL             string          `yaml:"geckoterminal_url"`
-	GeckoNetwork         string          `yaml:"geckoterminal_network"`
-	GeckoPerMinute       float64         `yaml:"geckoterminal_per_minute"`
-	PricesURL            string          `yaml:"prices_url"`
-	HyperSyncPerMinute   float64         `yaml:"hypersync_per_minute"`
-	HyperSyncInteractive float64         `yaml:"hypersync_interactive_per_minute"`
-	MetaCache            time.Duration   `yaml:"meta_cache"`
-	HoldersCache         time.Duration   `yaml:"holders_cache"`
-	GeckoCache           time.Duration   `yaml:"geckoterminal_cache"`
-	TransfersCache       time.Duration   `yaml:"transfers_cache"`
-	PriceCache           time.Duration   `yaml:"price_cache"`
-	SearchCache          time.Duration   `yaml:"search_cache"`
-	TokenLists           []tokenListFile `yaml:"token_lists"`
-	TokenListRefresh     time.Duration   `yaml:"token_list_refresh"`
-	TokenListTimeout     time.Duration   `yaml:"token_list_timeout"`
-	TransferWindowBlocks uint64          `yaml:"transfer_window_blocks"`
-	TransferMinBlocks    uint64          `yaml:"transfer_min_blocks"`
-	TransferPageBudget   int             `yaml:"transfer_page_budget"`
-	Index                indexFile       `yaml:"index"`
-	Markets              marketsFile     `yaml:"markets"`
-	HolderMap            holderMapFile   `yaml:"holder_map"`
+	Chains                 []chainFile     `yaml:"chains"`
+	RPCUpstreamFilter      *string         `yaml:"rpc_upstream_filter"`
+	MulticallMaxCalls      int             `yaml:"multicall_max_calls"`
+	RPCBackgroundPerSecond float64         `yaml:"rpc_background_per_second"`
+	BlockscoutURL          string          `yaml:"blockscout_url"`
+	BlockscoutPerSecond    float64         `yaml:"blockscout_per_second"`
+	GeckoURL               string          `yaml:"geckoterminal_url"`
+	GeckoNetwork           string          `yaml:"geckoterminal_network"`
+	GeckoPerMinute         float64         `yaml:"geckoterminal_per_minute"`
+	PricesURL              string          `yaml:"prices_url"`
+	HyperSyncPerMinute     float64         `yaml:"hypersync_per_minute"`
+	HyperSyncInteractive   float64         `yaml:"hypersync_interactive_per_minute"`
+	MetaCache              time.Duration   `yaml:"meta_cache"`
+	HoldersCache           time.Duration   `yaml:"holders_cache"`
+	GeckoCache             time.Duration   `yaml:"geckoterminal_cache"`
+	TransfersCache         time.Duration   `yaml:"transfers_cache"`
+	PriceCache             time.Duration   `yaml:"price_cache"`
+	SearchCache            time.Duration   `yaml:"search_cache"`
+	TokenLists             []tokenListFile `yaml:"token_lists"`
+	TokenListRefresh       time.Duration   `yaml:"token_list_refresh"`
+	TokenListTimeout       time.Duration   `yaml:"token_list_timeout"`
+	TransferWindowBlocks   uint64          `yaml:"transfer_window_blocks"`
+	TransferMinBlocks      uint64          `yaml:"transfer_min_blocks"`
+	TransferPageBudget     int             `yaml:"transfer_page_budget"`
+	Index                  indexFile       `yaml:"index"`
+	Markets                marketsFile     `yaml:"markets"`
+	HolderMap              holderMapFile   `yaml:"holder_map"`
 }
 
 var (
@@ -266,6 +271,12 @@ func Load(dir string) (Config, error) {
 	if v := os.Getenv("TOKENS_PRICES_URL"); v != "" {
 		raw.PricesURL = v
 	}
+	if raw.MulticallMaxCalls == 0 {
+		raw.MulticallMaxCalls = rpc.DefaultMaxCalls
+	}
+	if raw.RPCBackgroundPerSecond == 0 {
+		raw.RPCBackgroundPerSecond = rpc.DefaultBackgroundPerSecond
+	}
 	if raw.RPCUpstreamFilter == nil {
 		raw.RPCUpstreamFilter = new(defaultUpstreamFilter)
 	}
@@ -283,26 +294,28 @@ func (f file) build() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
-		RPCUpstreamFilter:    *f.RPCUpstreamFilter,
-		BlockscoutURL:        strings.TrimRight(f.BlockscoutURL, "/"),
-		BlockscoutPerSecond:  f.BlockscoutPerSecond,
-		GeckoURL:             strings.TrimRight(f.GeckoURL, "/"),
-		GeckoNetwork:         f.GeckoNetwork,
-		GeckoPerMinute:       f.GeckoPerMinute,
-		PricesURL:            strings.TrimRight(f.PricesURL, "/"),
-		HyperSyncPerMinute:   f.HyperSyncPerMinute,
-		HyperSyncInteractive: f.HyperSyncInteractive,
-		MetaCache:            f.MetaCache,
-		HoldersCache:         f.HoldersCache,
-		GeckoCache:           f.GeckoCache,
-		TransfersCache:       f.TransfersCache,
-		PriceCache:           f.PriceCache,
-		SearchCache:          f.SearchCache,
-		TokenListRefresh:     f.TokenListRefresh,
-		TokenListTimeout:     f.TokenListTimeout,
-		TransferWindowBlocks: f.TransferWindowBlocks,
-		TransferMinBlocks:    f.TransferMinBlocks,
-		TransferPageBudget:   f.TransferPageBudget,
+		RPCUpstreamFilter:      *f.RPCUpstreamFilter,
+		MulticallMaxCalls:      f.MulticallMaxCalls,
+		RPCBackgroundPerSecond: f.RPCBackgroundPerSecond,
+		BlockscoutURL:          strings.TrimRight(f.BlockscoutURL, "/"),
+		BlockscoutPerSecond:    f.BlockscoutPerSecond,
+		GeckoURL:               strings.TrimRight(f.GeckoURL, "/"),
+		GeckoNetwork:           f.GeckoNetwork,
+		GeckoPerMinute:         f.GeckoPerMinute,
+		PricesURL:              strings.TrimRight(f.PricesURL, "/"),
+		HyperSyncPerMinute:     f.HyperSyncPerMinute,
+		HyperSyncInteractive:   f.HyperSyncInteractive,
+		MetaCache:              f.MetaCache,
+		HoldersCache:           f.HoldersCache,
+		GeckoCache:             f.GeckoCache,
+		TransfersCache:         f.TransfersCache,
+		PriceCache:             f.PriceCache,
+		SearchCache:            f.SearchCache,
+		TokenListRefresh:       f.TokenListRefresh,
+		TokenListTimeout:       f.TokenListTimeout,
+		TransferWindowBlocks:   f.TransferWindowBlocks,
+		TransferMinBlocks:      f.TransferMinBlocks,
+		TransferPageBudget:     f.TransferPageBudget,
 		Index: Index{
 			MaxTokens:            f.Index.MaxTokens,
 			BackfillBudget:       f.Index.BackfillBudget,
@@ -348,6 +361,10 @@ func (f file) validate() error {
 	switch {
 	case !rpc.ValidUpstreamFilter(*f.RPCUpstreamFilter):
 		return fmt.Errorf("rpc_upstream_filter must be empty or visible ASCII without spaces, at most %d bytes", rpc.MaxUpstreamFilter)
+	case f.MulticallMaxCalls < 1 || f.MulticallMaxCalls > rpc.DefaultMaxCalls:
+		return fmt.Errorf("multicall_max_calls must be 1 to %d, got %d", rpc.DefaultMaxCalls, f.MulticallMaxCalls)
+	case f.RPCBackgroundPerSecond <= 0 || f.RPCBackgroundPerSecond > rpc.DefaultBackgroundPerSecond:
+		return fmt.Errorf("rpc_background_per_second must be above 0 and at most %v, got %v", rpc.DefaultBackgroundPerSecond, f.RPCBackgroundPerSecond)
 	case !validURL(f.BlockscoutURL, "https"):
 		return errors.New("blockscout_url must be an https URL without credentials")
 	case f.BlockscoutPerSecond <= 0 || f.BlockscoutPerSecond > 10:
