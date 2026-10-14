@@ -208,7 +208,7 @@ var (
 	CovSearchUnverified   = Note{"token_search_unverified", "Tokens with verified false are on no curated list. Anyone can deploy a token with any name, so check the address. They are ranked by the pool liquidity GeckoTerminal reports, or not at all when it reports none."}
 	CovHoldersPartial     = Note{"token_holders_ranked_by_provider", "Holders, their order and holder_count come from Blockscout's index, read when the page was fetched and kept for up to 10 minutes."}
 
-	CovMapIndexIncomplete   = Note{"token_holder_map_index_incomplete", "The Monad index of this token is not complete: its backfill has not finished, or it follows only the addresses active since its start block. A map of part of the holders would mislead, so nodes is empty."}
+	CovMapIndexIncomplete   = Note{"token_holder_map_index_incomplete", "The index of this token is not complete: its backfill has not finished, or it follows only the addresses active since its start block. A map of part of the holders would mislead, so nodes is empty."}
 	CovMapLinksEthereumOnly = Note{"token_holder_map_links_ethereum_only", "Links between holders are read from HyperSync on Ethereum only, so links is unavailable on this chain."}
 	CovMapWindowCut         = Note{"token_holder_map_window_cut", "The token is busy, so the HyperSync request budget of one map read fewer days than the default window. links.window_days gives the days read."}
 	CovMapQueueFull         = Note{"token_holder_map_queue_full", "Too many maps wait for their links, so this one was not queued and links is unavailable. Ask again in a few minutes."}

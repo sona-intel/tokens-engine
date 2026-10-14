@@ -94,7 +94,7 @@ func (s *Service) HolderMap(ctx context.Context, chain string, token evm.Address
 		}
 		notes = append(notes, CovHoldersPartial)
 	} else {
-		if holders, err = s.fullIndexHolders(ctx, token, meta, limit, &notes); err != nil {
+		if holders, err = s.fullIndexHolders(ctx, cfg, token, meta, limit, &notes); err != nil {
 			return HolderMap{}, err
 		}
 		notes = append(notes, CovMapLinksEthereumOnly)
@@ -123,8 +123,8 @@ func (s *Service) HolderMap(ctx context.Context, chain string, token evm.Address
 }
 
 // fullIndexHolders is the index's list when the index of the token is complete, nil otherwise; the call queues a new token like the holder route
-func (s *Service) fullIndexHolders(ctx context.Context, token evm.Address, meta Meta, limit int, notes *[]Note) ([]Holder, error) {
-	t, state, err := s.ensureIndexed(ctx, token, meta.Decimals)
+func (s *Service) fullIndexHolders(ctx context.Context, cfg config.Chain, token evm.Address, meta Meta, limit int, notes *[]Note) ([]Holder, error) {
+	t, state, err := s.ensureIndexed(ctx, cfg.ID, token, meta.Decimals)
 	if err != nil {
 		return nil, err
 	}

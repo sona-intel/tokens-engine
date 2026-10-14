@@ -12,9 +12,10 @@ import (
 
 // StatusDeps are the parts the status route reports on
 type StatusDeps struct {
-	Config    config.Config
-	Store     *store.Store
-	Indexer   *index.Indexer
+	Config config.Config
+	Store  *store.Store
+	// Indexers are the holder indexes, in the order of the config
+	Indexers  []*index.Indexer
 	HyperSync *sources.HyperSync
 	PaidCalls func() int64
 	Now       func() time.Time
@@ -76,13 +77,15 @@ type Status struct {
 	Chains       []ChainStatus   `json:"chains"`
 	PaidRPCCalls int64           `json:"paid_rpc_calls"`
 	HyperSync    HyperSyncStatus `json:"hypersync"`
-	Index        *IndexStatus    `json:"index"`
-	Coverage     []Note          `json:"coverage"`
+	// Index repeats the first of Indexes for readers that expect a single index
+	Index    *IndexStatus  `json:"index"`
+	Indexes  []IndexStatus `json:"indexes"`
+	Coverage []Note        `json:"coverage"`
 }
 
 // BuildStatus reads the state of the engine, the index part needs the database
 func BuildStatus(ctx context.Context, d StatusDeps) (Status, error) {
-	out := Status{Kind: "tokens_status", Coverage: AllNotes, PaidRPCCalls: d.PaidCalls()}
+	out := Status{Kind: "tokens_status", Coverage: AllNotes, PaidRPCCalls: d.PaidCalls(), Indexes: []IndexStatus{}}
 	for _, c := range d.Config.Chains {
 		out.Chains = append(out.Chains, ChainStatus{Chain: c.ID, Name: c.Name, Holders: c.Holders})
 	}
@@ -91,19 +94,37 @@ func BuildStatus(ctx context.Context, d StatusDeps) (Status, error) {
 		Enabled: d.HyperSync.Enabled(), BackgroundPerMinute: d.Config.HyperSyncPerMinute, InteractivePerMinute: d.Config.HyperSyncInteractive,
 		Requests: hs.Requests, RateLimited: hs.RateLimited, Failed: hs.Failed, PausedS: int64(d.HyperSync.PausedFor().Seconds()),
 	}
-	if d.Indexer == nil {
+	if len(d.Indexers) == 0 {
 		return out, nil
 	}
-	ix := &IndexStatus{
-		Chain: d.Indexer.Chain(), MaxTokens: d.Config.Index.MaxTokens, BackfillBudget: d.Config.Index.BackfillBudget,
-		Counts: map[string]int{store.StateQueued: 0, store.StateIndexing: 0, store.StateReady: 0, store.StateFailed: 0}, Tokens: []IndexedToken{},
-	}
-	if head := d.Indexer.Head(ctx); head > 0 {
-		ix.HeadBlock = &head
-	}
-	rows, err := d.Store.Tokens(ctx, d.Indexer.Chain())
+	sizes, err := d.Store.Sizes(ctx)
 	if err != nil {
 		return Status{}, err
+	}
+	for _, x := range d.Indexers {
+		ix, err := indexStatus(ctx, d, x, sizes.Total)
+		if err != nil {
+			return Status{}, err
+		}
+		out.Indexes = append(out.Indexes, ix)
+	}
+	out.Index = &out.Indexes[0]
+	return out, nil
+}
+
+// indexStatus reads the state of one chain's index, disk is the size of the index tables of every chain
+func indexStatus(ctx context.Context, d StatusDeps, x *index.Indexer, disk int64) (IndexStatus, error) {
+	ix := IndexStatus{
+		Chain: x.Chain(), MaxTokens: d.Config.Index.MaxTokens, BackfillBudget: d.Config.Index.BackfillBudget,
+		Counts: map[string]int{store.StateQueued: 0, store.StateIndexing: 0, store.StateReady: 0, store.StateFailed: 0}, Tokens: []IndexedToken{},
+		DiskBytes: disk,
+	}
+	if head := x.Head(ctx); head > 0 {
+		ix.HeadBlock = &head
+	}
+	rows, err := d.Store.Tokens(ctx, x.Chain())
+	if err != nil {
+		return IndexStatus{}, err
 	}
 	for _, t := range rows {
 		ix.Counts[t.State]++
@@ -118,12 +139,7 @@ func BuildStatus(ctx context.Context, d StatusDeps) (Status, error) {
 		}
 		ix.Tokens = append(ix.Tokens, it)
 	}
-	sizes, err := d.Store.Sizes(ctx)
-	if err != nil {
-		return Status{}, err
-	}
-	ix.DiskBytes = sizes.Total
-	if p := d.Indexer.Current(); p != nil {
+	if p := x.Current(); p != nil {
 		b := &BackfillStatus{Token: p.Token.String(), Mode: p.Mode, NextBlock: p.NextBlock, HeadBlock: p.Head, Requests: p.Requests, StartedAt: stamp(p.Started)}
 		if p.Mode == store.ModeFull && p.Projected > 0 {
 			n := p.Projected
@@ -131,7 +147,7 @@ func BuildStatus(ctx context.Context, d StatusDeps) (Status, error) {
 		}
 		ix.Backfill = b
 	}
-	if at, e := d.Indexer.Tail(); !at.IsZero() || e != "" {
+	if at, e := x.Tail(); !at.IsZero() || e != "" {
 		if !at.IsZero() {
 			s := stamp(at)
 			ix.TailAt = &s
@@ -140,8 +156,7 @@ func BuildStatus(ctx context.Context, d StatusDeps) (Status, error) {
 			ix.TailError = &e
 		}
 	}
-	out.Index = ix
-	return out, nil
+	return ix, nil
 }
 
 // compile-time check that the indexer serves the service

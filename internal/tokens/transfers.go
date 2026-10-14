@@ -241,11 +241,11 @@ func largest(logs []sources.Log, token evm.Address) []store.Transfer {
 	return out[:min(len(out), MaxTransfers)]
 }
 
-/* Monad: the index keeps the largest transfers of each day */
+/* Index chains: the index keeps the largest transfers of each day */
 
 func (s *Service) indexWindow(ctx context.Context, out *Transfers, cfg config.Chain, client Chain, token evm.Address, meta Meta, limit int) error {
 	out.Source = SourceIndex
-	t, state, err := s.ensureIndexed(ctx, token, meta.Decimals)
+	t, state, err := s.ensureIndexed(ctx, cfg.ID, token, meta.Decimals)
 	if err != nil {
 		return err
 	}

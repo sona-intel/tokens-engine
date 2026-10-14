@@ -953,7 +953,7 @@ components:
     Status:
       type: object
       additionalProperties: false
-      required: [kind, chains, paid_rpc_calls, hypersync, index, coverage]
+      required: [kind, chains, paid_rpc_calls, hypersync, index, indexes, coverage]
       properties:
         kind: {type: string, enum: [tokens_status]}
         chains:
@@ -973,7 +973,7 @@ components:
           required: [enabled, background_per_minute, interactive_per_minute, requests, rate_limited, failed, paused_s]
           properties:
             enabled: {type: boolean}
-            background_per_minute: {type: number, description: 'Requests a minute the index may send.'}
+            background_per_minute: {type: number, description: 'Requests a minute the indexes of every chain may send together.'}
             interactive_per_minute: {type: number, description: 'Requests a minute visitors'' transfer windows may send.'}
             requests: {type: integer, minimum: 0}
             rate_limited: {type: integer, minimum: 0, description: 'Requests answered 429 because the shared quota was spent.'}
@@ -981,58 +981,66 @@ components:
             paused_s: {type: integer, minimum: 0, description: 'Seconds until the quota window resets, 0 when the engine may send.'}
         index:
           oneOf:
+            - {$ref: '#/components/schemas/IndexStatus'}
+            - {type: "null"}
+          description: The first entry of `indexes`, null when no chain takes its holders from an index.
+        indexes:
+          type: array
+          items: {$ref: '#/components/schemas/IndexStatus'}
+          description: The index of every chain whose holders come from one, in the order of the config.
+        coverage: {type: array, items: {$ref: '#/components/schemas/Note'}}
+    IndexStatus:
+      type: object
+      description: The index of one chain.
+      additionalProperties: false
+      required: [chain, head_block, max_tokens, backfill_budget, counts, disk_bytes, backfill, tail_at, tail_error, tokens]
+      properties:
+        chain: {$ref: '#/components/schemas/Chain'}
+        head_block: {type: [integer, "null"]}
+        max_tokens: {type: integer}
+        backfill_budget: {type: integer, description: 'The HyperSync requests a full backfill may take before the token switches to activity mode.'}
+        counts:
+          type: object
+          additionalProperties: false
+          required: [queued, indexing, ready, failed]
+          properties:
+            queued: {type: integer}
+            indexing: {type: integer}
+            ready: {type: integer}
+            failed: {type: integer}
+        disk_bytes: {type: integer, minimum: 0, description: 'Disk of the index tables of every chain, with their indexes.'}
+        backfill:
+          oneOf:
             - type: object
               additionalProperties: false
-              required: [chain, head_block, max_tokens, backfill_budget, counts, disk_bytes, backfill, tail_at, tail_error, tokens]
+              required: [token, mode, next_block, head_block, requests, projected_requests, started_at]
               properties:
-                chain: {$ref: '#/components/schemas/Chain'}
-                head_block: {type: [integer, "null"]}
-                max_tokens: {type: integer}
-                backfill_budget: {type: integer, description: 'The HyperSync requests a full backfill may take before the token switches to activity mode.'}
-                counts:
-                  type: object
-                  additionalProperties: false
-                  required: [queued, indexing, ready, failed]
-                  properties:
-                    queued: {type: integer}
-                    indexing: {type: integer}
-                    ready: {type: integer}
-                    failed: {type: integer}
-                disk_bytes: {type: integer, minimum: 0, description: 'Disk of the index tables with their indexes.'}
-                backfill:
-                  oneOf:
-                    - type: object
-                      additionalProperties: false
-                      required: [token, mode, next_block, head_block, requests, projected_requests, started_at]
-                      properties:
-                        token: {$ref: '#/components/schemas/Address'}
-                        mode: {type: string, enum: [full, activity]}
-                        next_block: {type: integer}
-                        head_block: {type: integer}
-                        requests: {type: integer}
-                        projected_requests: {type: [integer, "null"], description: 'The requests a full backfill would take in all, at the pace of the latest page.'}
-                        started_at: {$ref: '#/components/schemas/Time'}
-                    - {type: "null"}
-                tail_at: {type: [string, "null"], format: date-time}
-                tail_error: {type: [string, "null"]}
-                tokens:
-                  type: array
-                  items:
-                    type: object
-                    additionalProperties: false
-                    required: [token, state, mode, start_block, indexed_block, holders, requests, backfill_s, last_error]
-                    properties:
-                      token: {$ref: '#/components/schemas/Address'}
-                      state: {type: string, enum: [queued, indexing, ready, failed]}
-                      mode: {type: string, enum: [full, activity]}
-                      start_block: {type: integer}
-                      indexed_block: {type: [integer, "null"]}
-                      holders: {type: integer, minimum: 0}
-                      requests: {type: integer, minimum: 0, description: 'HyperSync requests the backfill spent.'}
-                      backfill_s: {type: [number, "null"], description: 'Seconds from the first start of the backfill to ready.'}
-                      last_error: {type: [string, "null"]}
+                token: {$ref: '#/components/schemas/Address'}
+                mode: {type: string, enum: [full, activity]}
+                next_block: {type: integer}
+                head_block: {type: integer}
+                requests: {type: integer}
+                projected_requests: {type: [integer, "null"], description: 'The requests a full backfill would take in all, at the pace of the latest page.'}
+                started_at: {$ref: '#/components/schemas/Time'}
             - {type: "null"}
-        coverage: {type: array, items: {$ref: '#/components/schemas/Note'}}
+        tail_at: {type: [string, "null"], format: date-time}
+        tail_error: {type: [string, "null"]}
+        tokens:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [token, state, mode, start_block, indexed_block, holders, requests, backfill_s, last_error]
+            properties:
+              token: {$ref: '#/components/schemas/Address'}
+              state: {type: string, enum: [queued, indexing, ready, failed]}
+              mode: {type: string, enum: [full, activity]}
+              start_block: {type: integer}
+              indexed_block: {type: [integer, "null"]}
+              holders: {type: integer, minimum: 0}
+              requests: {type: integer, minimum: 0, description: 'HyperSync requests the backfill spent.'}
+              backfill_s: {type: [number, "null"], description: 'Seconds from the first start of the backfill to ready.'}
+              last_error: {type: [string, "null"]}
     MarketCoverageCode:
       type: string
       enum: [market_top_coins_stale, market_token_map_unavailable, chain_defi_stale, chain_activity_stale, chain_series_last_day_partial, chain_protocols_not_additive, chain_protocol_change_all_chains]

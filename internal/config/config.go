@@ -36,8 +36,12 @@ type Chain struct {
 	HyperSyncURL  string
 	Holders       string
 	WrappedNative evm.Address
-	// GeckoNetwork is the GeckoTerminal network id of the chain, used by the token search
+	// GeckoNetwork is the GeckoTerminal network id of the chain, for the token search and the holder figures of an index chain
 	GeckoNetwork string
+	// ActivityWindowBlocks is how far behind the head an activity backfill of this chain starts, 0 for the index default
+	ActivityWindowBlocks uint64
+	// Prewarm are the tokens the index of this chain queues on start
+	Prewarm []evm.Address
 }
 
 // TokenList is a curated token list in the Uniswap token list format, the earlier a list the higher its rank
@@ -97,14 +101,25 @@ func (c Config) Chain(id string) (Chain, bool) {
 	return Chain{}, false
 }
 
-// IndexChain returns the one chain whose holders come from the engine's own index
-func (c Config) IndexChain() (Chain, bool) {
+// IndexChains are the chains whose holders come from the engine's own index, in the order of the config
+func (c Config) IndexChains() []Chain {
+	var out []Chain
 	for _, ch := range c.Chains {
 		if ch.Holders == HoldersIndex {
-			return ch, true
+			out = append(out, ch)
 		}
 	}
-	return Chain{}, false
+	return out
+}
+
+// IndexOf is the index config of one chain, with the chain's own activity window and pre-warm tokens
+func (c Config) IndexOf(ch Chain) Index {
+	x := c.Index
+	if ch.ActivityWindowBlocks > 0 {
+		x.ActivityWindowBlocks = ch.ActivityWindowBlocks
+	}
+	x.Prewarm = ch.Prewarm
+	return x
 }
 
 // Secret keeps a credential out of logs, formatted output and JSON
@@ -128,13 +143,15 @@ func (s Secret) MarshalText() ([]byte, error) { return []byte(s.String()), nil }
 func (s Secret) LogValue() slog.Value { return slog.StringValue(s.String()) }
 
 type chainFile struct {
-	ID            string `yaml:"id"`
-	Name          string `yaml:"name"`
-	RPCURL        string `yaml:"rpc_url"`
-	HyperSyncURL  string `yaml:"hypersync_url"`
-	Holders       string `yaml:"holders"`
-	WrappedNative string `yaml:"wrapped_native"`
-	GeckoNetwork  string `yaml:"gecko_network"`
+	ID                   string   `yaml:"id"`
+	Name                 string   `yaml:"name"`
+	RPCURL               string   `yaml:"rpc_url"`
+	HyperSyncURL         string   `yaml:"hypersync_url"`
+	Holders              string   `yaml:"holders"`
+	WrappedNative        string   `yaml:"wrapped_native"`
+	GeckoNetwork         string   `yaml:"gecko_network"`
+	ActivityWindowBlocks uint64   `yaml:"activity_window_blocks"`
+	Prewarm              []string `yaml:"prewarm"`
 }
 
 type tokenListFile struct {
@@ -150,7 +167,6 @@ type indexFile struct {
 	LagBlocks            uint64        `yaml:"lag_blocks"`
 	WindowDays           int           `yaml:"window_days"`
 	TopPerDay            int           `yaml:"top_per_day"`
-	Prewarm              []string      `yaml:"prewarm"`
 	RetryFailedAfter     time.Duration `yaml:"retry_failed_after"`
 }
 
@@ -268,17 +284,23 @@ func (f file) build() (Config, error) {
 		HolderMap: f.HolderMap.build(),
 	}
 	for _, c := range f.Chains {
-		ch := Chain{ID: c.ID, Name: c.Name, RPCURL: c.RPCURL, HyperSyncURL: c.HyperSyncURL, Holders: c.Holders, GeckoNetwork: c.GeckoNetwork}
+		ch := Chain{
+			ID: c.ID, Name: c.Name, RPCURL: c.RPCURL, HyperSyncURL: c.HyperSyncURL, Holders: c.Holders, GeckoNetwork: c.GeckoNetwork,
+			ActivityWindowBlocks: c.ActivityWindowBlocks,
+		}
+		if ch.GeckoNetwork == "" {
+			ch.GeckoNetwork = f.GeckoNetwork
+		}
 		if c.WrappedNative != "" {
 			ch.WrappedNative = evm.MustAddress(c.WrappedNative)
+		}
+		for _, p := range c.Prewarm {
+			ch.Prewarm = append(ch.Prewarm, evm.MustAddress(p))
 		}
 		cfg.Chains = append(cfg.Chains, ch)
 	}
 	for _, l := range f.TokenLists {
 		cfg.TokenLists = append(cfg.TokenLists, TokenList(l))
-	}
-	for _, p := range f.Index.Prewarm {
-		cfg.Index.Prewarm = append(cfg.Index.Prewarm, evm.MustAddress(p))
 	}
 	return cfg, nil
 }
@@ -347,7 +369,6 @@ func (f file) validateChains() error {
 		return errors.New("chains must list at least one chain")
 	}
 	seen := map[string]bool{}
-	indexed := 0
 	for _, c := range f.Chains {
 		switch {
 		case !caip2.MatchString(c.ID):
@@ -360,23 +381,40 @@ func (f file) validateChains() error {
 			return fmt.Errorf("rpc_url of %s (or TOKENS_RPC_%s) must be an http or https URL without credentials", c.ID, strings.ToUpper(c.Name))
 		case !validURL(c.HyperSyncURL, "https"):
 			return fmt.Errorf("hypersync_url of %s must be an https URL without credentials", c.ID)
-		case !networks.MatchString(c.GeckoNetwork):
+		case c.GeckoNetwork != "" && !networks.MatchString(c.GeckoNetwork):
 			return fmt.Errorf("gecko_network of %s is not a network id", c.ID)
 		case c.Holders != HoldersBlockscout && c.Holders != HoldersIndex:
 			return fmt.Errorf("holders of %s must be %s or %s", c.ID, HoldersBlockscout, HoldersIndex)
+		case c.Holders != HoldersIndex && (c.ActivityWindowBlocks > 0 || len(c.Prewarm) > 0):
+			return fmt.Errorf("activity_window_blocks and prewarm of %s need holders: %s", c.ID, HoldersIndex)
 		}
 		if c.WrappedNative != "" {
 			if _, err := evm.ParseAddress(c.WrappedNative); err != nil {
 				return fmt.Errorf("wrapped_native of %s: %w", c.ID, err)
 			}
 		}
-		if c.Holders == HoldersIndex {
-			indexed++
+		if err := c.validatePrewarm(f.Index.MaxTokens); err != nil {
+			return err
 		}
 		seen[c.ID], seen[c.Name] = true, true
 	}
-	if indexed > 1 {
-		return errors.New("only one chain can take its holders from the index")
+	return nil
+}
+
+func (c chainFile) validatePrewarm(maxTokens int) error {
+	if len(c.Prewarm) > maxTokens {
+		return fmt.Errorf("prewarm of %s lists more tokens than index.max_tokens", c.ID)
+	}
+	seen := map[evm.Address]bool{}
+	for _, p := range c.Prewarm {
+		a, err := evm.ParseAddress(p)
+		if err != nil {
+			return fmt.Errorf("prewarm of %s: %w", c.ID, err)
+		}
+		if seen[a] {
+			return fmt.Errorf("prewarm of %s lists %s twice", c.ID, a)
+		}
+		seen[a] = true
 	}
 	return nil
 }
@@ -397,19 +435,6 @@ func (x indexFile) validate() error {
 		return fmt.Errorf("index.top_per_day must be 1 to 1000, got %d", x.TopPerDay)
 	case x.RetryFailedAfter <= 0:
 		return errors.New("index.retry_failed_after must be positive")
-	case len(x.Prewarm) > x.MaxTokens:
-		return errors.New("index.prewarm lists more tokens than index.max_tokens")
-	}
-	seen := map[evm.Address]bool{}
-	for _, p := range x.Prewarm {
-		a, err := evm.ParseAddress(p)
-		if err != nil {
-			return fmt.Errorf("index.prewarm: %w", err)
-		}
-		if seen[a] {
-			return fmt.Errorf("index.prewarm lists %s twice", a)
-		}
-		seen[a] = true
 	}
 	return nil
 }

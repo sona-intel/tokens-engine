@@ -31,12 +31,13 @@ const readyTTL = 2 * time.Second
 type App struct {
 	*tokens.Service
 	*marketService
-	cfg     config.Config
-	status  tokens.StatusDeps
-	st      *store.Store
-	lists   *tokens.Lists
-	Indexer *index.Indexer
-	maps    *holdermap.Builder
+	cfg    config.Config
+	status tokens.StatusDeps
+	st     *store.Store
+	lists  *tokens.Lists
+	// Indexers keep the holder index of every chain whose holders come from it, in the order of the config
+	Indexers []*index.Indexer
+	maps     *holdermap.Builder
 
 	mu      sync.Mutex
 	readyAt time.Time
@@ -70,15 +71,14 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 	}
 	hs := sources.NewHyperSync(urls, cfg.HyperSyncKey, cfg.HyperSyncPerMinute, cfg.HyperSyncInteractive)
 	a := &App{cfg: cfg, st: d.Store}
-	if ic, ok := cfg.IndexChain(); ok {
+	idx := map[string]tokens.Index{}
+	for _, ic := range cfg.IndexChains() {
 		if !hs.Enabled() {
 			return nil, errors.New("the index chain needs ENVIO_HYPERSYNC_KEY")
 		}
-		a.Indexer = index.New(ic, cfg.Index, d.Store, hs, d.Clients[ic.ID], d.Logger)
-	}
-	var idx tokens.Index
-	if a.Indexer != nil {
-		idx = a.Indexer
+		x := index.New(ic, cfg.IndexOf(ic), d.Store, hs, d.Clients[ic.ID], d.Logger.With("chain", ic.ID))
+		a.Indexers = append(a.Indexers, x)
+		idx[ic.ID] = x
 	}
 	blockscout := sources.NewBlockscout(cfg.BlockscoutURL, cfg.BlockscoutPerSecond)
 	a.lists = tokens.NewLists(cfg, sources.NewTokenLists(cfg.TokenListTimeout))
@@ -87,10 +87,10 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 		Config:     cfg,
 		Chains:     chains,
 		Blockscout: blockscout,
-		Gecko:      sources.NewGecko(cfg.GeckoURL, cfg.GeckoNetwork, cfg.GeckoPerMinute),
+		Gecko:      sources.NewGecko(cfg.GeckoURL, cfg.GeckoPerMinute),
 		Prices:     sources.NewPrices(cfg.PricesURL),
 		Logs:       hs,
-		Index:      idx,
+		Indexes:    idx,
 		Store:      d.Store,
 		Lists:      a.lists,
 		HolderMaps: a.maps,
@@ -109,7 +109,7 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 		}
 		return n
 	}
-	a.status = tokens.StatusDeps{Config: cfg, Store: d.Store, Indexer: a.Indexer, HyperSync: hs, PaidCalls: paid}
+	a.status = tokens.StatusDeps{Config: cfg, Store: d.Store, Indexers: a.Indexers, HyperSync: hs, PaidCalls: paid}
 	reg.MustRegister(
 		prometheus.NewCounterFunc(prometheus.CounterOpts{Name: "tokens_paid_rpc_calls_total", Help: "JSON-RPC calls the router billed to a paid upstream"},
 			func() float64 { return float64(paid()) }),
@@ -125,17 +125,18 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 			func() float64 { return float64(a.maps.Stats().Failed) }),
 		prometheus.NewCounterFunc(prometheus.CounterOpts{Name: "tokens_holder_map_hypersync_requests_total", Help: "HyperSync pages the holder map reads spent"},
 			func() float64 { return float64(a.maps.Stats().Requests) }),
-		prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "tokens_index_backfill_next_block", Help: "Next block of the running backfill, 0 when none runs"},
-			func() float64 {
-				if a.Indexer == nil {
-					return 0
-				}
-				if p := a.Indexer.Current(); p != nil {
-					return float64(p.NextBlock)
-				}
-				return 0
-			}),
 	)
+	for _, x := range a.Indexers {
+		reg.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "tokens_index_backfill_next_block", Help: "Next block of the running backfill of the chain's index, 0 when none runs",
+			ConstLabels: prometheus.Labels{"chain": x.Chain()},
+		}, func() float64 {
+			if p := x.Current(); p != nil {
+				return float64(p.NextBlock)
+			}
+			return 0
+		}))
+	}
 	return a, nil
 }
 
@@ -163,14 +164,15 @@ func (a *App) Ready(ctx context.Context) bool {
 	return a.ready
 }
 
-// Run runs the index, the holder map builds and the token list refresh until ctx ends
+// Run runs the indexes, the holder map builds and the token list refresh until ctx ends
 func (a *App) Run(ctx context.Context) {
 	go a.lists.Run(ctx)
 	go a.marketService.Run(ctx)
 	go a.maps.Run(ctx, a.Service)
-	if a.Indexer == nil {
-		<-ctx.Done()
-		return
+	var wg sync.WaitGroup
+	for _, x := range a.Indexers {
+		wg.Go(func() { x.Run(ctx, a.Decimals(x.Chain())) })
 	}
-	a.Indexer.Run(ctx, a.Decimals(a.Indexer.Chain()))
+	<-ctx.Done()
+	wg.Wait()
 }

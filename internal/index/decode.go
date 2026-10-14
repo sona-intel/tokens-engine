@@ -1,4 +1,4 @@
-// Package index keeps the Monad holder index: a backfill per token from HyperSync, then one tail for every ready token
+// Package index keeps the holder index of a chain: a backfill per token from HyperSync, then one tail for every ready token
 package index
 
 import (

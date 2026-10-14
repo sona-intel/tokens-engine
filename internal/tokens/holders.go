@@ -100,7 +100,7 @@ func (s *Service) Holders(ctx context.Context, chain string, token evm.Address, 
 		if len(c.Page) > 0 || c.Offset > 0 {
 			return Holders{}, ErrBadCursor
 		}
-		err = s.indexPage(ctx, &out, token, meta, limit, c)
+		err = s.indexPage(ctx, &out, cfg, token, meta, limit, c)
 	}
 	if err != nil {
 		return Holders{}, err
@@ -170,7 +170,7 @@ func (s *Service) blockscoutList(ctx context.Context, token evm.Address, meta Me
 	return items, next, nil
 }
 
-func (s *Service) indexPage(ctx context.Context, out *Holders, token evm.Address, meta Meta, limit int, c cursor) error {
+func (s *Service) indexPage(ctx context.Context, out *Holders, cfg config.Chain, token evm.Address, meta Meta, limit int, c cursor) error {
 	out.Source = SourceIndex
 	var after *store.HolderCursor
 	if c.Balance != "" || c.Holder != "" {
@@ -181,7 +181,7 @@ func (s *Service) indexPage(ctx context.Context, out *Holders, token evm.Address
 		}
 		after = &store.HolderCursor{Balance: b, Holder: h}
 	}
-	t, state, err := s.ensureIndexed(ctx, token, meta.Decimals)
+	t, state, err := s.ensureIndexed(ctx, cfg.ID, token, meta.Decimals)
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func (s *Service) indexPage(ctx context.Context, out *Holders, token evm.Address
 		}
 	}
 	if out.HolderCount == nil {
-		h, err := s.geckoHolders(ctx, token)
+		h, err := s.geckoHolders(ctx, cfg.GeckoNetwork, token)
 		switch {
 		case err == nil:
 			if h.Count != nil {
@@ -235,9 +235,10 @@ func (s *Service) indexPage(ctx context.Context, out *Holders, token evm.Address
 }
 
 // ensureIndexed queues the token on its first request and describes its index, the row is nil when the index cannot take it
-func (s *Service) ensureIndexed(ctx context.Context, token evm.Address, decimals uint8) (*store.Token, *IndexState, error) {
-	head := s.d.Index.Head(ctx)
-	t, err := s.d.Index.Ensure(ctx, token, decimals)
+func (s *Service) ensureIndexed(ctx context.Context, chain string, token evm.Address, decimals uint8) (*store.Token, *IndexState, error) {
+	idx := s.d.Indexes[chain]
+	head := idx.Head(ctx)
+	t, err := idx.Ensure(ctx, token, decimals)
 	if errors.Is(err, store.ErrFull) {
 		st := &IndexState{State: IndexUnavailable}
 		if head > 0 {

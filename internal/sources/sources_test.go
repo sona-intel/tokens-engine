@@ -142,21 +142,21 @@ func TestGeckoRecorded(t *testing.T) {
 		"/networks/monad/tokens/" + deadAddr.String() + "/info": "gecko/info.unknown.json",
 	})
 	// the recorded unknown token is a real 404 body, served here with status 200 by the table, so route it as 404
-	g := NewGecko(srv.URL, "monad", 600)
+	g := NewGecko(srv.URL, 600)
 	ctx := t.Context()
-	h, err := g.Holders(ctx, monUSDC)
+	h, err := g.Holders(ctx, "monad", monUSDC)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if h.Count == nil || *h.Count != 76440 || h.Top10Share == nil || *h.Top10Share != 0.772433 || h.LastUpdated == nil {
 		t.Errorf("USDC holders %+v", h)
 	}
-	w, err := g.Holders(ctx, monWMON)
+	w, err := g.Holders(ctx, "monad", monWMON)
 	// GeckoTerminal sends no distribution for WMON, only the count
 	if err != nil || w.Count == nil || *w.Count != 91458 || w.Top10Share != nil {
 		t.Errorf("WMON holders %+v %v", w, err)
 	}
-	mc, err := g.MarketCap(ctx, monUSDC)
+	mc, err := g.MarketCap(ctx, "monad", monUSDC)
 	if err != nil || mc == nil || *mc < 7e10 {
 		t.Errorf("USDC market cap %v %v", mc, err)
 	}
@@ -165,20 +165,20 @@ func TestGeckoRecorded(t *testing.T) {
 		t.Error("the recorded unknown answer is not GeckoTerminal's 404 body")
 	}
 	notFound := recorded(t, map[string]string{})
-	if _, err := NewGecko(notFound.URL, "monad", 600).Holders(ctx, deadAddr); !errors.Is(err, ErrNotFound) {
+	if _, err := NewGecko(notFound.URL, 600).Holders(ctx, "monad", deadAddr); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown token: %v", err)
 	}
 }
 
 func TestGeckoPausesAfter429(t *testing.T) {
 	srv := recorded(t, map[string]string{"/networks/monad/tokens/" + monUSDC.String() + "/info": "status:429"})
-	g := NewGecko(srv.URL, "monad", 600)
+	g := NewGecko(srv.URL, 600)
 	var ue *UnavailableError
-	if _, err := g.Holders(t.Context(), monUSDC); !errors.As(err, &ue) {
+	if _, err := g.Holders(t.Context(), "monad", monUSDC); !errors.As(err, &ue) {
 		t.Fatalf("429: %v", err)
 	}
 	// the next call does not reach GeckoTerminal while the pause lasts
-	if _, err := g.Holders(t.Context(), monUSDC); !errors.As(err, &ue) || ue.RetryAfter < 25*time.Second {
+	if _, err := g.Holders(t.Context(), "monad", monUSDC); !errors.As(err, &ue) || ue.RetryAfter < 25*time.Second {
 		t.Errorf("paused call: %v", err)
 	}
 }

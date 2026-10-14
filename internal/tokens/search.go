@@ -103,14 +103,16 @@ func (s *Service) Search(ctx context.Context, q string, limit int) (Search, erro
 		}
 	}
 
+	type held struct {
+		addrs []evm.Address
+		metas []Meta
+	}
 	var (
 		wg         sync.WaitGroup
 		mu         sync.Mutex
 		longTail   bool
 		hitsByChan = map[string][]sources.GeckoHit{}
-		indexed    []Meta
-		indexAddr  []evm.Address
-		indexChain string
+		indexed    = map[string]held{}
 	)
 	for _, cfg := range s.d.Config.Chains {
 		if cfg.GeckoNetwork == "" {
@@ -127,10 +129,15 @@ func (s *Service) Search(ctx context.Context, q string, limit int) (Search, erro
 			hitsByChan[cfg.ID] = hits
 		})
 	}
-	if s.d.Index != nil && s.d.Store != nil {
-		indexChain = s.d.Index.Chain()
+	for _, cfg := range s.d.Config.Chains {
+		if _, ok := s.d.Indexes[cfg.ID]; !ok || s.d.Store == nil {
+			continue
+		}
 		wg.Go(func() {
-			indexAddr, indexed = s.indexedMetas(ctx, indexChain)
+			addrs, metas := s.indexedMetas(ctx, cfg.ID)
+			mu.Lock()
+			defer mu.Unlock()
+			indexed[cfg.ID] = held{addrs, metas}
 		})
 	}
 	wg.Wait()
@@ -138,24 +145,26 @@ func (s *Service) Search(ctx context.Context, q string, limit int) (Search, erro
 		return Search{}, err
 	}
 
-	for i, m := range indexed {
-		addr := indexAddr[i]
-		key := listKey{indexChain, addr}
-		if _, ok := cands[key]; ok {
-			continue
-		}
-		var name, symbol string
-		if m.Name != nil {
-			name = *m.Name
-		}
-		if m.Symbol != nil {
-			symbol = *m.Symbol
-		}
-		sl, nl := strings.ToLower(symbol), strings.ToLower(name)
-		if class, exact := classify(q, sl, nl, addr.String()); class != matchNone {
-			cands[key] = &candidate{
-				item: SearchItem{Chain: indexChain, Token: addr.String(), Name: m.Name, Symbol: m.Symbol, Decimals: int(m.Decimals)},
-				name: nl, symbol: sl, class: class, exact: exact,
+	for chain, h := range indexed {
+		for i, m := range h.metas {
+			addr := h.addrs[i]
+			key := listKey{chain, addr}
+			if _, ok := cands[key]; ok {
+				continue
+			}
+			var name, symbol string
+			if m.Name != nil {
+				name = *m.Name
+			}
+			if m.Symbol != nil {
+				symbol = *m.Symbol
+			}
+			sl, nl := strings.ToLower(symbol), strings.ToLower(name)
+			if class, exact := classify(q, sl, nl, addr.String()); class != matchNone {
+				cands[key] = &candidate{
+					item: SearchItem{Chain: chain, Token: addr.String(), Name: m.Name, Symbol: m.Symbol, Decimals: int(m.Decimals)},
+					name: nl, symbol: sl, class: class, exact: exact,
+				}
 			}
 		}
 	}
@@ -257,7 +266,7 @@ func (s *Service) geckoSearch(ctx context.Context, network, q string) ([]sources
 	return hits, err
 }
 
-// indexedMetas reads name and symbol of the tokens the Monad index holds, which GeckoTerminal may not know.
+// indexedMetas reads name and symbol of the tokens the index of a chain holds, which GeckoTerminal may not know.
 // A token whose contract does not answer is left out.
 func (s *Service) indexedMetas(ctx context.Context, chain string) ([]evm.Address, []Meta) {
 	addrs, err := s.d.Store.IndexedTokens(ctx, chain)

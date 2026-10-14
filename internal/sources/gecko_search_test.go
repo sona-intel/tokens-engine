@@ -17,7 +17,7 @@ func TestGeckoSearchRecorded(t *testing.T) {
 		q + "eth&query=mon":    "gecko/search.eth.mon.json",
 		q + "eth&query=wmon":   "gecko/search.eth.wmon.json",
 	})
-	g := NewGecko(srv.URL, "monad", 6000)
+	g := NewGecko(srv.URL, 6000)
 	ctx := t.Context()
 
 	hits, err := g.Search(ctx, "monad", "usdc")
@@ -108,9 +108,9 @@ func TestLogosRecorded(t *testing.T) {
 			t.Errorf("%s: %v %v, want %s", c.token, tok.IconURL, err, want)
 		}
 	}
-	g := NewGecko(gt.URL, "monad", 6000)
+	g := NewGecko(gt.URL, 6000)
 	for _, c := range []struct{ token, file string }{{monUSDC.String(), "gecko/info.usdc.json"}, {monWMON.String(), "gecko/info.wmon.json"}} {
-		h, err := g.Holders(ctx, mustAddr(t, c.token))
+		h, err := g.Holders(ctx, "monad", mustAddr(t, c.token))
 		want := recordedField(t, c.file, "image_url")
 		if err != nil || h.ImageURL == nil || *h.ImageURL != want || !strings.HasPrefix(want, "https://") {
 			t.Errorf("%s: %v %v, want %s", c.token, h.ImageURL, err, want)
@@ -124,7 +124,7 @@ func TestLogosRecorded(t *testing.T) {
 		t.Errorf("an http icon was kept: %v %v", tok.IconURL, err)
 	}
 	insecure = strings.Replace(string(testkit.Read(t, "gecko/info.usdc.json")), recordedField(t, "gecko/info.usdc.json", "image_url"), "javascript:alert(1)", 1)
-	h, err := NewGecko(serveBody(t, insecure), "monad", 6000).Holders(ctx, monUSDC)
+	h, err := NewGecko(serveBody(t, insecure), 6000).Holders(ctx, "monad", monUSDC)
 	if err != nil || h.ImageURL != nil || h.Count == nil {
 		t.Errorf("a javascript image was kept: %v %v", h.ImageURL, err)
 	}

@@ -38,8 +38,8 @@ type Blockscout interface {
 }
 
 type Gecko interface {
-	Holders(ctx context.Context, token evm.Address) (sources.GeckoHolders, error)
-	MarketCap(ctx context.Context, token evm.Address) (*float64, error)
+	Holders(ctx context.Context, network string, token evm.Address) (sources.GeckoHolders, error)
+	MarketCap(ctx context.Context, network string, token evm.Address) (*float64, error)
 	Search(ctx context.Context, network, query string) ([]sources.GeckoHit, error)
 }
 
@@ -53,7 +53,7 @@ type Logs interface {
 	PausedFor() time.Duration
 }
 
-// Index is the Monad holder index
+// Index is the holder index of one chain
 type Index interface {
 	Chain() string
 	Lookup(ctx context.Context, token evm.Address) (store.Token, bool, error)
@@ -75,8 +75,9 @@ type Deps struct {
 	Gecko      Gecko
 	Prices     Prices
 	Logs       Logs
-	Index      Index
-	Store      IndexStore
+	// Indexes are the holder indexes by chain, one for every chain whose holders come from the index
+	Indexes map[string]Index
+	Store   IndexStore
 	// Lists are the curated token lists, nil for none
 	Lists *Lists
 	// HolderMaps builds the links of Ethereum holder maps, nil leaves links unavailable
@@ -249,15 +250,15 @@ func (s *Service) blockscoutHolders(ctx context.Context, token evm.Address, page
 	})
 }
 
-func (s *Service) geckoHolders(ctx context.Context, token evm.Address) (sources.GeckoHolders, error) {
-	return s.gtHolders.Get(ctx, token.String(), ttlOK[sources.GeckoHolders](s.d.Config.GeckoCache), func(ctx context.Context) (sources.GeckoHolders, error) {
-		return s.d.Gecko.Holders(ctx, token)
+func (s *Service) geckoHolders(ctx context.Context, network string, token evm.Address) (sources.GeckoHolders, error) {
+	return s.gtHolders.Get(ctx, network+"/"+token.String(), ttlOK[sources.GeckoHolders](s.d.Config.GeckoCache), func(ctx context.Context) (sources.GeckoHolders, error) {
+		return s.d.Gecko.Holders(ctx, network, token)
 	})
 }
 
-func (s *Service) geckoCap(ctx context.Context, token evm.Address) (*float64, error) {
-	return s.gtCap.Get(ctx, token.String(), ttlOK[*float64](s.d.Config.GeckoCache), func(ctx context.Context) (*float64, error) {
-		return s.d.Gecko.MarketCap(ctx, token)
+func (s *Service) geckoCap(ctx context.Context, network string, token evm.Address) (*float64, error) {
+	return s.gtCap.Get(ctx, network+"/"+token.String(), ttlOK[*float64](s.d.Config.GeckoCache), func(ctx context.Context) (*float64, error) {
+		return s.d.Gecko.MarketCap(ctx, network, token)
 	})
 }
 
@@ -319,7 +320,7 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 		})
 	} else {
 		wg.Go(func() {
-			h, err := s.geckoHolders(ctx, token)
+			h, err := s.geckoHolders(ctx, cfg.GeckoNetwork, token)
 			if errors.Is(err, sources.ErrNotFound) {
 				err = nil
 			}
@@ -327,14 +328,14 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 			count, top10, providerLogo = h.Count, h.Top10Share, h.ImageURL
 		})
 		wg.Go(func() {
-			v, err := s.geckoCap(ctx, token)
+			v, err := s.geckoCap(ctx, cfg.GeckoNetwork, token)
 			if errors.Is(err, sources.ErrNotFound) {
 				err = nil
 			}
 			mcap, mcapErr = v, err
 		})
 		wg.Go(func() {
-			if t, ok, err := s.d.Index.Lookup(ctx, token); err == nil && ok && t.State == store.StateReady && t.Mode == store.ModeFull {
+			if t, ok, err := s.d.Indexes[chain].Lookup(ctx, token); err == nil && ok && t.State == store.StateReady && t.Mode == store.ModeFull {
 				indexCount = &t.Holders
 			}
 		})

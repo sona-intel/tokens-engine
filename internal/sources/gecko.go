@@ -17,14 +17,13 @@ const (
 
 // Gecko reads holder counts and market caps from GeckoTerminal's keyless public API
 type Gecko struct {
-	base    string
-	network string
-	hc      *http.Client
-	pacer   *Pacer
+	base  string
+	hc    *http.Client
+	pacer *Pacer
 }
 
-func NewGecko(base, network string, perMinute float64) *Gecko {
-	return &Gecko{base: base, network: network, hc: newHTTPClient(geckoTimeout), pacer: NewPacer(perMinute, 3)}
+func NewGecko(base string, perMinute float64) *Gecko {
+	return &Gecko{base: base, hc: newHTTPClient(geckoTimeout), pacer: NewPacer(perMinute, 3)}
 }
 
 func (g *Gecko) WithHTTPClient(hc *http.Client) *Gecko {
@@ -57,12 +56,12 @@ type geckoInfo struct {
 }
 
 // Holders reads /networks/{network}/tokens/{token}/info, ErrNotFound when GeckoTerminal does not know the token
-func (g *Gecko) Holders(ctx context.Context, token evm.Address) (GeckoHolders, error) {
+func (g *Gecko) Holders(ctx context.Context, network string, token evm.Address) (GeckoHolders, error) {
 	if err := g.wait(ctx); err != nil {
 		return GeckoHolders{}, err
 	}
 	var raw geckoInfo
-	if err := g.get(ctx, "/networks/"+g.network+"/tokens/"+token.String()+"/info", &raw); err != nil {
+	if err := g.get(ctx, "/networks/"+network+"/tokens/"+token.String()+"/info", &raw); err != nil {
 		return GeckoHolders{}, err
 	}
 	return raw.convert()
@@ -110,12 +109,12 @@ type geckoToken struct {
 }
 
 // MarketCap reads market_cap_usd of /networks/{network}/tokens/{token}, nil when GeckoTerminal reports none
-func (g *Gecko) MarketCap(ctx context.Context, token evm.Address) (*float64, error) {
+func (g *Gecko) MarketCap(ctx context.Context, network string, token evm.Address) (*float64, error) {
 	if err := g.wait(ctx); err != nil {
 		return nil, err
 	}
 	var raw geckoToken
-	if err := g.get(ctx, "/networks/"+g.network+"/tokens/"+token.String(), &raw); err != nil {
+	if err := g.get(ctx, "/networks/"+network+"/tokens/"+token.String(), &raw); err != nil {
 		return nil, err
 	}
 	return raw.convert()

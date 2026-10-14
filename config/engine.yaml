@@ -14,17 +14,22 @@ chains:
     gecko_network: monad
     # WMON, a WETH9 copy whose Deposit and Withdrawal events mint and burn
     wrapped_native: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a"
+    # queued in the index on start
+    prewarm:
+      - "0x754704bc059f8c67012fed69bc8a327a5aafb603" # USDC
+      - "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" # WMON
 # X-ERPC-Use-Upstream on every JSON-RPC request, so the router never uses its paid dRPC upstreams
 rpc_upstream_filter: "!drpc-*"
 blockscout_url: https://eth.blockscout.com
 blockscout_per_second: 3
 geckoterminal_url: https://api.geckoterminal.com/api/v2
+# the network of a chain that sets no gecko_network
 geckoterminal_network: monad
 # GeckoTerminal allows about 30 a minute for everyone on this address, so the engine keeps to 20
 geckoterminal_per_minute: 20
 prices_url: http://prices:8080
 # the HyperSync key allows 15 requests a minute for everyone and x402-indexer uses most of them:
-# the index (backfill and tail) keeps to 3, visitors' Ethereum transfer windows to 2.
+# the indexes of every chain (backfills and tails) keep to 3 together, visitors' Ethereum transfer windows to 2.
 # Holder-map jobs take their requests from the same 2, behind every visitor: at most 1 a minute, and only while a slot stays free
 hypersync_per_minute: 3
 hypersync_interactive_per_minute: 2
@@ -54,16 +59,13 @@ index:
   max_tokens: 50
   # a backfill that would need more HyperSync requests than this follows the token's recent activity instead
   backfill_budget: 120
-  # about 2 hours of Monad blocks
+  # about 2 hours of Monad blocks, a chain can set its own
   activity_window_blocks: 20000
   tail_interval: 60s
   lag_blocks: 10
   window_days: 7
   top_per_day: 100
   retry_failed_after: 10m
-  prewarm:
-    - "0x754704bc059f8c67012fed69bc8a327a5aafb603" # USDC
-    - "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" # WMON
 # Chain and market routes: top coins from CoinGecko, DeFi figures from DefiLlama, activity from Blockscout's stats service.
 # Everything is read in the background and held in memory; the optional COINGECKO_API_KEY (a demo key) goes in the x-cg-demo-api-key header.
 markets:
