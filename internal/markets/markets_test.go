@@ -78,6 +78,7 @@ func TestTopCoinsTokens(t *testing.T) {
 	want := []markets.CoinToken{
 		{Chain: "eip155:1", Address: fixture.EthUSDC.String()},
 		{Chain: "eip155:143", Address: fixture.MonUSDC.String()},
+		{Chain: "eip155:5042", Address: fixture.ArcUSDC.String()},
 	}
 	if !slices.Equal(usdc, want) {
 		t.Errorf("usd-coin: %v", usdc)

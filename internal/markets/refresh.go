@@ -257,6 +257,7 @@ func (s *Service) RefreshActivity(ctx context.Context) error {
 var platformChains = []struct{ key, chain string }{
 	{"ethereum", "eip155:1"},
 	{"monad", "eip155:143"},
+	{"arc", "eip155:5042"},
 }
 
 func coinTokens(platforms map[string]string) []CoinToken {

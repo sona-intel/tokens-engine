@@ -5,7 +5,7 @@ import (
 	"slices"
 )
 
-// Multicall3 is the canonical deployment, at this address on Ethereum and Monad
+// Multicall3 is the canonical deployment, at this address on Ethereum, Monad and Arc
 var Multicall3 = MustAddress("0xcA11bde05977b3631167028862bE2a173976CA11")
 
 // Call3 is one entry of aggregate3, a failed call reverts the whole batch unless AllowFailure is set

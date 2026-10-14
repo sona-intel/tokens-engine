@@ -18,6 +18,22 @@ chains:
     prewarm:
       - "0x754704bc059f8c67012fed69bc8a327a5aafb603" # USDC
       - "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" # WMON
+  - id: "eip155:5042"
+    name: arc
+    rpc_url: http://rpc-router:4000/sona/arc
+    hypersync_url: https://arc.hypersync.xyz/query
+    holders: index
+    gecko_network: arc
+    # about 2 hours of Arc's half-second blocks
+    activity_window_blocks: 14400
+    # USDC is the native coin, read from the system emitter that logs every move at 18 decimals and checked with eth_getBalance
+    native:
+      token: "0x3600000000000000000000000000000000000000"
+      emitter: "0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE"
+      decimals: 18
+    prewarm:
+      - "0x3600000000000000000000000000000000000000" # USDC
+      - "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1" # EURC
 # X-ERPC-Use-Upstream on every JSON-RPC request, so the router never uses its paid dRPC upstreams
 rpc_upstream_filter: "!drpc-*"
 blockscout_url: https://eth.blockscout.com
@@ -43,12 +59,13 @@ search_cache: 5m
 # Curated token lists in the Uniswap token list format. The tokens on them are verified in a search, and the earlier
 # a list the higher it ranks. They load on start and again every token_list_refresh; a list that fails keeps its last copy.
 token_lists:
-  # Uniswap Labs' default list, the engine keeps its Ethereum (1) and Monad (143) entries
+  # Uniswap Labs' default list, the engine keeps its Ethereum (1) and Monad (143) entries, it has none for Arc (5042)
   - name: uniswap-default
     url: https://tokens.uniswap.org
   # the Monad Foundation's list of Monad mainnet tokens, https://github.com/monad-crypto/token-list
   - name: monad-mainnet
     url: https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/tokenlist-mainnet.json
+  # CoinGecko's Arc list (tokens.coingecko.com/arc/all.json) is left out, it holds two memecoins with the symbol USDC
 token_list_refresh: 24h
 token_list_timeout: 20s
 # Ethereum's large transfers come from the last blocks: 7,200 blocks is about a day, cut down for busy tokens
@@ -86,6 +103,9 @@ markets:
       activity: true
     - id: "eip155:143"
       llama_name: Monad
+    # DefiLlama's chain names are case-sensitive
+    - id: "eip155:5042"
+      llama_name: Arc
 # Holder map: bubbles for the largest holders, and on Ethereum links between holders that sent each other the token.
 # Links come from HyperSync in a background job on the visitors' share of the quota (hypersync_interactive_per_minute),
 # at a lower priority than visitors and at most 1 request a minute, so a map of 8 requests takes about 8 minutes.

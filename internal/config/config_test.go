@@ -37,19 +37,27 @@ func TestRepoConfigLoads(t *testing.T) {
 	}
 	eth, ok := cfg.Chain("eip155:1")
 	indexed := cfg.IndexChains()
-	if !ok || eth.Holders != HoldersBlockscout || eth.GeckoNetwork != "eth" || len(indexed) != 1 {
+	if !ok || eth.Holders != HoldersBlockscout || eth.GeckoNetwork != "eth" || eth.Native != nil || len(indexed) != 2 {
 		t.Fatalf("chains %+v", cfg.Chains)
 	}
-	mon := indexed[0]
-	if mon.ID != "eip155:143" || mon.WrappedNative != evm.MustAddress("0x3bd359c1119da7da1d913d1c4d2b7c461115433a") || len(mon.Prewarm) != 2 {
+	mon, arc := indexed[0], indexed[1]
+	if mon.ID != "eip155:143" || mon.WrappedNative != evm.MustAddress("0x3bd359c1119da7da1d913d1c4d2b7c461115433a") || mon.Native != nil || len(mon.Prewarm) != 2 {
 		t.Fatalf("monad %+v", mon)
 	}
 	if cfg.RPCUpstreamFilter != "!drpc-*" || cfg.HyperSyncPerMinute+cfg.HyperSyncInteractive > 15 || cfg.Index.MaxTokens != 50 || cfg.Index.Prewarm != nil {
 		t.Errorf("config %+v", cfg)
 	}
-	// Monad keeps the index defaults and queues its own pre-warm tokens
+	// Monad keeps the index defaults, Arc reads USDC from the system emitter and starts its activity window two hours back
 	if x := cfg.IndexOf(mon); x.ActivityWindowBlocks != 20000 || len(x.Prewarm) != 2 || x.Prewarm[0] != evm.MustAddress("0x754704bc059f8c67012fed69bc8a327a5aafb603") {
 		t.Errorf("monad index %+v", x)
+	}
+	usdc := evm.MustAddress("0x3600000000000000000000000000000000000000")
+	if arc.ID != "eip155:5042" || arc.Name != "arc" || arc.GeckoNetwork != "arc" || !arc.WrappedNative.IsZero() || arc.NativeToken(usdc) == nil ||
+		arc.Native.Emitter != evm.MustAddress("0xfffffffffffffffffffffffffffffffffffffffe") || arc.Native.Decimals != 18 {
+		t.Fatalf("arc %+v", arc)
+	}
+	if x := cfg.IndexOf(arc); x.ActivityWindowBlocks != 14400 || len(x.Prewarm) != 2 || x.Prewarm[0] != usdc || x.LagBlocks != cfg.Index.LagBlocks {
+		t.Errorf("arc index %+v", x)
 	}
 	if cfg.HoldersCache != 10*time.Minute || cfg.GeckoCache != 15*time.Minute || cfg.TransfersCache != 15*time.Minute || cfg.TransferWindowBlocks != 7200 {
 		t.Errorf("caches %+v", cfg)
@@ -58,9 +66,9 @@ func TestRepoConfigLoads(t *testing.T) {
 		t.Error("the key is not kept out of printed output")
 	}
 	// a chain that names no GeckoTerminal network takes geckoterminal_network
-	cfg, err = Load(write(t, strings.Replace(repoConfig(t), "    gecko_network: eth\n", "", 1)))
-	if e, _ := cfg.Chain("eip155:1"); err != nil || e.GeckoNetwork != "monad" {
-		t.Errorf("default network %q %v", e.GeckoNetwork, err)
+	cfg, err = Load(write(t, strings.Replace(repoConfig(t), "    gecko_network: arc\n", "", 1)))
+	if a, _ := cfg.Chain("eip155:5042"); err != nil || a.GeckoNetwork != "monad" {
+		t.Errorf("default network %q %v", a.GeckoNetwork, err)
 	}
 }
 
@@ -85,8 +93,11 @@ func TestInvalidConfigs(t *testing.T) {
 		"no filter in the url":  {"blockscout_url: https://eth.blockscout.com", "blockscout_url: https://user:pw@eth.blockscout.com"},
 		"plain http hypersync":  {"hypersync_url: https://eth.hypersync.xyz/query", "hypersync_url: http://eth.hypersync.xyz/query"},
 		"unknown holders":       {"holders: blockscout", "holders: explorer"},
+		"native on blockscout":  {"    holders: blockscout\n", "    holders: blockscout\n    native: {token: \"0x3600000000000000000000000000000000000000\", emitter: \"0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE\", decimals: 18}\n"},
+		"native emits itself":   {`emitter: "0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE"`, `emitter: "0x3600000000000000000000000000000000000000"`},
+		"native of 0 decimals":  {"      decimals: 18", "      decimals: 0"},
 		"prewarm on blockscout": {"    holders: blockscout\n", "    holders: blockscout\n    prewarm: [\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\"]\n"},
-		"bad gecko network":     {"gecko_network: eth", "gecko_network: Eth!"},
+		"bad gecko network":     {"gecko_network: arc", "gecko_network: Arc!"},
 		"filter with a space":   {`rpc_upstream_filter: "!drpc-*"`, `rpc_upstream_filter: "!drpc *"`},
 		"prewarm twice":         {`- "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" # WMON`, `- "0x754704bc059f8c67012fed69bc8a327a5aafb603"`},
 		"tail too fast":         {"tail_interval: 60s", "tail_interval: 1s"},

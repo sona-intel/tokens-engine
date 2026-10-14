@@ -14,7 +14,7 @@ func TestMarketsConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := cfg.Markets
-	if m.CoinGeckoGap != 20*time.Second || m.TopCoinsRefresh != 5*time.Minute || m.DefiRefresh != time.Hour || len(m.Chains) != 2 {
+	if m.CoinGeckoGap != 20*time.Second || m.TopCoinsRefresh != 5*time.Minute || m.DefiRefresh != time.Hour || len(m.Chains) != 3 {
 		t.Fatalf("markets %+v", m)
 	}
 	if c, ok := m.Chain("eip155:143"); !ok || c.LlamaName != "Monad" || c.Activity {
@@ -22,6 +22,9 @@ func TestMarketsConfig(t *testing.T) {
 	}
 	if c, ok := m.Chain("eip155:1"); !ok || c.LlamaName != "Ethereum" || !c.Activity {
 		t.Errorf("ethereum %+v", c)
+	}
+	if c, ok := m.Chain("eip155:5042"); !ok || c.LlamaName != "Arc" || c.Activity {
+		t.Errorf("arc %+v", c)
 	}
 	if m.CoinGeckoKey.Reveal() != "cg-demo" || fmt.Sprint(m.CoinGeckoKey) != redacted || strings.Contains(fmt.Sprintf("%#v", cfg), "cg-demo") {
 		t.Error("the CoinGecko key is not kept out of printed output")

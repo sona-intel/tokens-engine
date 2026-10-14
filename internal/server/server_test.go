@@ -38,7 +38,7 @@ type svc struct {
 }
 
 func (s *svc) Supported(chain string) bool {
-	return chain == fixture.Ethereum || chain == fixture.Monad
+	return chain == fixture.Ethereum || chain == fixture.Monad || chain == fixture.Arc
 }
 
 func (s *svc) Ready(context.Context) bool { return s.ready }
@@ -110,11 +110,15 @@ type specCase struct {
 	mutate     func(*svc)
 	// listsFailed serves a service whose curated lists could not load on start
 	listsFailed bool
+	// arc serves a service that serves Arc too
+	arc bool
 }
 
 var (
 	eth      = "/internal/v1/chains/eip155:1/tokens/"
 	mon      = "/internal/v1/chains/eip155:143/tokens/"
+	arc      = "/internal/v1/chains/eip155:5042/tokens/"
+	arcUSDC  = fixture.ArcUSDC.String()
 	usdc     = fixture.EthUSDC.String()
 	mkr      = fixture.EthMKR.String()
 	monUSDC  = fixture.MonUSDC.String()
@@ -166,6 +170,13 @@ func cases() []specCase {
 		{name: "search that matches nothing", path: search + "?q=zz"},
 		{name: "search with GeckoTerminal down", path: search + "?q=usdc", mutate: func(s *svc) { s.f.GeckoDown = true }},
 		{name: "search with the curated lists unavailable", path: search + "?q=usdc", listsFailed: true},
+		{name: "info of USDC on Arc", path: arc + arcUSDC, arc: true},
+		{name: "holders of USDC on Arc with native balances", path: arc + arcUSDC + "/holders?limit=5", arc: true},
+		{name: "holders on Arc of a queued token", path: arc + fixture.ArcEURC.String() + "/holders", arc: true},
+		{name: "transfers of USDC on Arc", path: arc + arcUSDC + "/transfers?limit=100", arc: true},
+		{name: "holder map of Arc USDC in full mode", path: arc + arcUSDC + "/holder-map", arc: true, mutate: func(s *svc) { s.f.IndexMode = "full" }},
+		{name: "search with Arc served", path: search + "?q=usdc", arc: true, mutate: func(s *svc) { s.f.GeckoDown = true }},
+		{name: "Arc on a service without it", path: arc + arcUSDC, status: http.StatusNotFound},
 
 		{name: "limit zero", path: eth + usdc + "/holders?limit=0", status: http.StatusBadRequest, malformed: true},
 		{name: "limit 101", path: mon + monUSDC + "/transfers?limit=101", status: http.StatusBadRequest, malformed: true},
@@ -287,8 +298,11 @@ func TestSpecValidatesResponses(t *testing.T) {
 	for _, c := range cases() {
 		t.Run(c.name, func(t *testing.T) {
 			build := fixture.Service
-			if c.listsFailed {
+			switch {
+			case c.listsFailed:
 				build = fixture.ListsFailed
+			case c.arc:
+				build = fixture.WithArc
 			}
 			h := newSvcWith(t, build, c.mutate)
 			ctx, cancel := context.WithCancel(t.Context())
@@ -372,9 +386,9 @@ func checkDeclared(t *testing.T, op *openapi3.Operation, rec *httptest.ResponseR
 	}
 }
 
-func TestHoldersCursorWalksBothChains(t *testing.T) {
-	h := newSvc(t, nil)
-	for _, base := range []string{eth + usdc, mon + monUSDC} {
+func TestHoldersCursorWalksEachChain(t *testing.T) {
+	h := newSvcWith(t, fixture.WithArc, nil)
+	for _, base := range []string{eth + usdc, mon + monUSDC, arc + arcUSDC} {
 		seen := map[string]bool{}
 		path := base + "/holders?limit=7"
 		for range 5 {

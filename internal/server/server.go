@@ -228,7 +228,7 @@ func (a *app) checkPath(c *call) error {
 		return invalidID("The chain is not a CAIP-2 identifier.")
 	}
 	if !a.svc.Supported(chain) {
-		return &httpError{problem.CodeUnsupportedChain, "Only eip155:1 and eip155:143 are served."}
+		return &httpError{problem.CodeUnsupportedChain, "Only eip155:1, eip155:143 and eip155:5042 are served."}
 	}
 	token, err := evm.ParseAddress(c.req.PathValue("token"))
 	if err != nil {
@@ -381,7 +381,7 @@ func (a *app) fail(w http.ResponseWriter, req *http.Request, err error) {
 	case errors.As(err, &he):
 		p = problem.New(he.code, he.detail, instance)
 	case errors.Is(err, tokens.ErrUnsupportedChain):
-		p = problem.New(problem.CodeUnsupportedChain, "Only eip155:1 and eip155:143 are served.", instance)
+		p = problem.New(problem.CodeUnsupportedChain, "Only eip155:1, eip155:143 and eip155:5042 are served.", instance)
 	case errors.Is(err, tokens.ErrNotToken):
 		p = problem.New(problem.CodeNotFound, "This address is not an ERC-20 token: it answers neither decimals nor totalSupply.", instance)
 	case errors.Is(err, tokens.ErrBadCursor):

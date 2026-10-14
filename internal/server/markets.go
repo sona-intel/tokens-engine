@@ -73,7 +73,7 @@ func daysParam(q url.Values, def int, all bool, allowed ...int) (int, error) {
 func marketErr(err error) error {
 	switch {
 	case errors.Is(err, markets.ErrUnsupportedChain):
-		return &httpError{problem.CodeUnsupportedChain, "Only eip155:1 and eip155:143 have market data."}
+		return &httpError{problem.CodeUnsupportedChain, "Only eip155:1, eip155:143 and eip155:5042 have market data."}
 	case errors.Is(err, markets.ErrNoActivity):
 		return &httpError{problem.CodeUnsupportedChain, "Chain activity comes from Ethereum's Blockscout stats service, and no keyless source is wired for this chain. Only eip155:1 has it."}
 	}

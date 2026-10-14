@@ -19,12 +19,13 @@ func TestCoinGeckoPlatformsKeepsServedChains(t *testing.T) {
 		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
-	got, err := NewCoinGecko(srv.URL, "", time.Millisecond).WithHTTPClient(srv.Client()).Platforms(t.Context(), "ethereum", "monad")
+	got, err := NewCoinGecko(srv.URL, "", time.Millisecond).WithHTTPClient(srv.Client()).Platforms(t.Context(), "ethereum", "monad", "arc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	usdc := got["usd-coin"]
-	if len(usdc) != 2 || usdc["ethereum"] != "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" || usdc["monad"] != "0x754704bc059f8c67012fed69bc8a327a5aafb603" {
+	if len(usdc) != 3 || usdc["ethereum"] != "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" || usdc["monad"] != "0x754704bc059f8c67012fed69bc8a327a5aafb603" ||
+		usdc["arc"] != "0x3600000000000000000000000000000000000000" {
 		t.Errorf("usd-coin: %v", usdc)
 	}
 	if m := got["wrapped-monad"]; len(m) != 1 || m["monad"] == "" {

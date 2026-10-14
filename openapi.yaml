@@ -557,11 +557,12 @@ components:
       in: path
       required: true
       description: |
-        The chain, as a CAIP-2 id: `eip155:1` (Ethereum) or `eip155:143` (Monad). A value that is no CAIP-2 id answers 400 `invalid_id`, and any other chain answers 404 `unsupported_chain`.
+        The chain, as a CAIP-2 id: `eip155:1` (Ethereum), `eip155:143` (Monad) or `eip155:5042` (Arc). A value that is no CAIP-2 id answers 400 `invalid_id`, and any other chain answers 404 `unsupported_chain`.
       schema: {type: string}
       examples:
         ethereum: {summary: Ethereum, value: "eip155:1"}
         monad: {summary: Monad, value: "eip155:143"}
+        arc: {summary: Arc, value: "eip155:5042"}
     Token:
       name: token
       in: path
@@ -572,6 +573,7 @@ components:
       examples:
         monad_usdc: {summary: USDC on Monad, value: "0x754704bc059f8c67012fed69bc8a327a5aafb603"}
         eth_usdc: {summary: USDC on Ethereum, value: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"}
+        arc_usdc: {summary: USDC on Arc (the ERC-20 view of the native coin), value: "0x3600000000000000000000000000000000000000"}
     Limit:
       name: limit
       in: query
@@ -661,7 +663,7 @@ components:
               value: {"type": "urn:sona:problem:not_found", "title": "Not found", "status": 404, "detail": "This address is not an ERC-20 token: it answers neither decimals nor totalSupply.", "instance": "/internal/v1/chains/eip155:1/tokens/0x37305b1cd40574e4c5ce33f8e8306be057fd7341", "code": "not_found"}
             unsupported_chain:
               summary: Another chain
-              value: {"type": "urn:sona:problem:unsupported_chain", "title": "Unsupported chain", "status": 404, "detail": "Only eip155:1 and eip155:143 are served.", "instance": "/internal/v1/chains/eip155:8453/tokens/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "code": "unsupported_chain"}
+              value: {"type": "urn:sona:problem:unsupported_chain", "title": "Unsupported chain", "status": 404, "detail": "Only eip155:1, eip155:143 and eip155:5042 are served.", "instance": "/internal/v1/chains/eip155:8453/tokens/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "code": "unsupported_chain"}
     Internal:
       description: The service failed in a way it has no name for (`internal`). Report the `X-Request-Id`.
       headers: *problemHeaders
@@ -709,7 +711,7 @@ components:
         retry_after_s: {type: integer, minimum: 1, maximum: 60, description: 'Seconds to wait before a retry. Only on 503.'}
     Chain:
       type: string
-      enum: ["eip155:1", "eip155:143"]
+      enum: ["eip155:1", "eip155:143", "eip155:5042"]
     Address:
       type: string
       pattern: '^0x[0-9a-f]{40}$'
