@@ -104,10 +104,54 @@ func TestAggregate3Batches(t *testing.T) {
 		return b
 	})
 	c, _ := New(srv.URL)
-	calls := make([]evm.Call3, MaxBatch+5)
+	calls := make([]evm.Call3, DefaultMaxCalls+5)
 	res, err := c.Aggregate3(t.Context(), calls)
 	if err != nil || len(res) != len(calls) || batches.Load() != 2 {
 		t.Fatalf("%d results in %d batches: %v", len(res), batches.Load(), err)
+	}
+}
+
+func TestAggregate3SplitsAtTheConfiguredSize(t *testing.T) {
+	for _, tc := range []struct {
+		opts    []Option
+		calls   int
+		batches int32
+	}{
+		{nil, 100, 1},
+		{nil, 101, 2},
+		{nil, 250, 3},
+		{[]Option{WithMaxCalls(40)}, 100, 3},
+	} {
+		var batches atomic.Int32
+		srv, _ := router(t, "", func(req rpcRequest) []byte {
+			batches.Add(1)
+			msg := req.Params[0].(map[string]any)
+			data, _ := evm.DecodeHex(msg["data"].(string))
+			n := int(data[4+63]) + int(data[4+62])<<8
+			if n > tc.calls || n > DefaultMaxCalls {
+				t.Errorf("a batch of %d calls", n)
+			}
+			var out strings.Builder
+			out.WriteString("0x" + word(32) + word(uint64(n)))
+			for i := range n {
+				out.WriteString(word(uint64(32*n + 96*i)))
+			}
+			for range n {
+				out.WriteString(word(0) + word(64) + word(0))
+			}
+			b, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "result": out.String()})
+			return b
+		})
+		c, _ := New(srv.URL, tc.opts...)
+		if res, err := c.Aggregate3(t.Context(), make([]evm.Call3, tc.calls)); err != nil || len(res) != tc.calls || batches.Load() != tc.batches {
+			t.Errorf("%d calls: %d results in %d batches (want %d): %v", tc.calls, len(res), batches.Load(), tc.batches, err)
+		}
+	}
+	if _, err := New("http://x", WithMaxCalls(0)); err == nil {
+		t.Error("0 calls accepted")
+	}
+	if _, err := New("http://x", WithMaxCalls(DefaultMaxCalls+1)); err == nil {
+		t.Error("more than the default accepted")
 	}
 }
 

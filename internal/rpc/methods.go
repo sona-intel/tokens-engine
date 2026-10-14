@@ -13,8 +13,8 @@ import (
 	"tokens/internal/evm"
 )
 
-// MaxBatch is the most calls one aggregate3 carries, which keeps a batch of balanceOf reads far below the call gas limit
-const MaxBatch = 300
+// DefaultMaxCalls is the most calls one aggregate3 carries, the router's per-upstream budgets cannot take more
+const DefaultMaxCalls = 100
 
 type Header struct {
 	Number uint64
@@ -60,11 +60,11 @@ func (c *Client) Call(ctx context.Context, to evm.Address, data []byte) ([]byte,
 	return out, nil
 }
 
-// Aggregate3 sends the calls through Multicall3 in batches of MaxBatch, every call may fail on its own
+// Aggregate3 sends the calls through Multicall3 in batches of the client's maxCalls, every call may fail on its own
 func (c *Client) Aggregate3(ctx context.Context, calls []evm.Call3) ([]evm.Result3, error) {
 	out := make([]evm.Result3, 0, len(calls))
-	for start := 0; start < len(calls); start += MaxBatch {
-		batch := calls[start:min(start+MaxBatch, len(calls))]
+	for start := 0; start < len(calls); start += c.maxCalls {
+		batch := calls[start:min(start+c.maxCalls, len(calls))]
 		raw, err := c.Call(ctx, evm.Multicall3, evm.EncodeAggregate3(batch))
 		if err != nil {
 			return nil, err

@@ -66,6 +66,8 @@ type Client struct {
 	maxResponse int64
 	onCredits   func(method, header string, paid bool)
 	upstream    string
+	pacer       *Pacer
+	maxCalls    int
 
 	nextID      atomic.Uint64
 	paidCalls   atomic.Int64
@@ -122,6 +124,28 @@ func WithOnCredits(fn func(method, header string, paid bool)) Option {
 	}
 }
 
+// WithPacer paces every eth_call of the client by the lane of its context
+func WithPacer(p *Pacer) Option {
+	return func(c *Client) error {
+		if p == nil {
+			return errors.New("rpc: nil pacer")
+		}
+		c.pacer = p
+		return nil
+	}
+}
+
+// WithMaxCalls sets the most calls one aggregate3 carries, 1 to DefaultMaxCalls
+func WithMaxCalls(n int) Option {
+	return func(c *Client) error {
+		if n < 1 || n > DefaultMaxCalls {
+			return fmt.Errorf("rpc: calls per aggregate3 must be 1 to %d", DefaultMaxCalls)
+		}
+		c.maxCalls = n
+		return nil
+	}
+}
+
 // WithUpstreamFilter sets the eRPC upstream filter sent on every request, empty sends none
 func WithUpstreamFilter(filter string) Option {
 	return func(c *Client) error {
@@ -161,6 +185,7 @@ func New(endpoint string, opts ...Option) (*Client, error) {
 		timeout:     defaultTimeout,
 		backoff:     defaultBackoff,
 		maxResponse: defaultMaxResponse,
+		maxCalls:    DefaultMaxCalls,
 	}
 	for _, opt := range opts {
 		if err := opt(c); err != nil {
@@ -225,7 +250,7 @@ func (c *Client) call(ctx context.Context, method string, params ...any) (jsonte
 				return nil, fmt.Errorf("rpc %s: %w", method, err)
 			}
 		}
-		result, retry, err := c.attempt(ctx, method, body)
+		result, retry, err := c.paced(ctx, method, body)
 		if err == nil {
 			return result, nil
 		}
@@ -235,6 +260,19 @@ func (c *Client) call(ctx context.Context, method string, params ...any) (jsonte
 		last = err
 	}
 	return nil, fmt.Errorf("rpc %s: %w", method, last)
+}
+
+// paced waits for a slot of the caller's lane before an eth_call attempt and holds it until the attempt is over
+func (c *Client) paced(ctx context.Context, method string, body []byte) (jsontext.Value, bool, error) {
+	if c.pacer == nil || method != "eth_call" {
+		return c.attempt(ctx, method, body)
+	}
+	release, err := c.pacer.Acquire(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	defer release()
+	return c.attempt(ctx, method, body)
 }
 
 func sleep(ctx context.Context, d time.Duration) error {
