@@ -24,7 +24,6 @@ const (
 	probeSpan = 1_000_000
 	// startMargin starts a backfill this much earlier than the block rate says, so its first whole day is whole
 	startMargin = 1.05
-	retryAfter  = time.Minute
 )
 
 // Source is the HyperSync client, its background lane shared with every other background job of the engine
@@ -65,18 +64,17 @@ func (c *Counter) Chain() string { return c.chain }
 // Run counts up to the head, then waits Poll between reads, until ctx ends
 func (c *Counter) Run(ctx context.Context) {
 	for {
-		wait := c.cfg.Poll
+		// a failed page is asked again only after Poll, so a page that keeps failing costs no more than the count at the head
 		if err := c.CatchUp(ctx); err != nil {
 			if ctx.Err() != nil {
 				return
 			}
 			c.log.WarnContext(ctx, "chain stats count failed, it resumes from its cursor", "error", err)
-			wait = min(wait, retryAfter)
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(wait):
+		case <-time.After(c.cfg.Poll):
 		}
 	}
 }
