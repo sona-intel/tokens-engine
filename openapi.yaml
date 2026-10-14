@@ -2,9 +2,9 @@ openapi: 3.1.2
 info:
   title: Sona token engine
   version: 1.0.0
-  summary: Internal token data for token pages on Ethereum and Monad, called only by sona-api.
+  summary: Internal token data for token pages on Ethereum, Monad and Arc, called only by sona-api.
   description: |
-    This service answers three questions about one ERC-20 token: what is it (name, symbol, logo, supply, price, market cap, holder count), who holds it, and what were its largest recent transfers. It also finds a token by name or symbol for a search box. It serves Ethereum (`eip155:1`) and Monad (`eip155:143`). Only the public `sona-api` will call it, and it will put these bodies inside its public answers. You call it directly to debug, or to see exactly what the public API will get.
+    This service answers three questions about one ERC-20 token: what is it (name, symbol, logo, supply, price, market cap, holder count), who holds it, and what were its largest recent transfers. It also finds a token by name or symbol for a search box. It serves Ethereum (`eip155:1`), Monad (`eip155:143`) and Arc (`eip155:5042`). Only the public `sona-api` will call it, and it will put these bodies inside its public answers. You call it directly to debug, or to see exactly what the public API will get.
 
     | Container | Inside the Docker network | On the host |
     |---|---|---|
@@ -14,18 +14,18 @@ info:
 
     ## Where the data comes from
 
-    | Field | Ethereum (`eip155:1`) | Monad (`eip155:143`) |
+    | Field | Ethereum (`eip155:1`) | Monad (`eip155:143`) and Arc (`eip155:5042`) |
     |---|---|---|
     | name, symbol, decimals, total supply | `eth_call` through Sona's RPC router, batched in one Multicall3 call, on free upstreams only | same |
     | price | Sona's prices service (DefiLlama's free coins API) | same |
     | market cap | Blockscout's `circulating_market_cap` | GeckoTerminal's `market_cap_usd` |
     | holder count, top 10 share | Blockscout (`holders_count`, and the first page of holders) | GeckoTerminal (`holders.count`, `distribution_percentage.top_10`) |
-    | holder list | Blockscout, 50 a page, read through and re-paged | the engine's own index, built from HyperSync |
+    | holder list | Blockscout, 50 a page, read through and re-paged | the engine's own index of each chain, built from HyperSync |
     | large transfers | HyperSync, the last 7,200 blocks (about a day) or less for a busy token | the engine's own index, the largest of each UTC day over the last 7 days |
     | holder map nodes | Blockscout's holder list, as the holder route reads it | the engine's own index, only once it is complete (`full` mode, `ready`) |
     | holder map links | HyperSync, transfers between the nodes over the last 30 days, read in the background | none |
     | logo | the curated lists' `logoURI`, then Blockscout's `icon_url` | the curated lists' `logoURI`, then GeckoTerminal's `image_url` |
-    | search | the curated lists (Uniswap default), then GeckoTerminal's pool search | the curated lists (Uniswap default, Monad token list), then GeckoTerminal's pool search, then the tokens the index holds |
+    | search | the curated lists (Uniswap default), then GeckoTerminal's pool search | the curated lists (Uniswap default and the Monad token list on Monad, none on Arc), then GeckoTerminal's pool search, then the tokens the index holds |
 
     Nothing here calls a paid upstream: every JSON-RPC request carries `X-ERPC-Use-Upstream: !drpc-*`, and `/internal/v1/status` counts any call the router still billed in `paid_rpc_calls`.
 
@@ -39,19 +39,20 @@ info:
 
     | List | URL | Chains kept |
     |---|---|---|
-    | Uniswap Labs default list | https://tokens.uniswap.org | Ethereum and Monad |
+    | Uniswap Labs default list | https://tokens.uniswap.org | Ethereum and Monad (it lists no Arc token) |
     | Monad token list, kept by the Monad Foundation (`monad-crypto/token-list`) | https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/tokenlist-mainnet.json | Monad |
 
-    Every other token comes from GeckoTerminal's pool search or from the Monad index, and is never verified. Being on a list is not an endorsement: it only says that someone put the address there.
+    Every other token comes from GeckoTerminal's pool search or from an index, and is never verified. Being on a list is not an endorsement: it only says that someone put the address there. Arc has no curated list: CoinGecko's Arc list (`https://tokens.coingecko.com/arc/all.json`) holds two memecoins with the symbol USDC beside the real one, so it is left out, and every Arc token is unverified.
 
-    ## The Monad index
+    ## The index of Monad and Arc
 
-    Monad has no keyless explorer API with holder lists, so the engine builds its own from the token's `Transfer` logs, read in bulk from Envio HyperSync. It keeps only the current balance of each holder and the largest transfers of each UTC day over the last 7 days, never every transfer. Wrapped MON (`0x3bd359c1119da7da1d913d1c4d2b7c461115433a`) also counts its `Deposit` and `Withdrawal` events, which mint and burn it.
+    Monad and Arc have no keyless explorer API with holder lists (Arc's explorer sits behind a Cloudflare challenge), so the engine builds its own from the token's `Transfer` logs, read in bulk from Envio HyperSync. Each chain has its own index. It keeps only the current balance of each holder and the largest transfers of each UTC day over the last 7 days, never every transfer. Wrapped MON (`0x3bd359c1119da7da1d913d1c4d2b7c461115433a`) also counts its `Deposit` and `Withdrawal` events, which mint and burn it.
 
-    - **On demand.** The first holder or transfer request for a Monad token queues its backfill and answers at once, with what the index holds so far and an `index` object: `state` is `queued`, then `indexing`, then `ready`. A token in `queued` or `indexing` answers 200 with partial data, never an error. After the backfill a tail keeps every ready token current, about once a minute, a few blocks behind the head. USDC and wrapped MON are queued when the engine starts.
-    - **One at a time.** One backfill runs at a time, and the index holds at most 50 tokens (config `index.max_tokens`). A token past that answers `state: unavailable` with an empty list.
-    - **Two modes.** The HyperSync key is free and shared with Sona's x402 indexer: 15 requests a minute for both, of which this engine uses at most 3 for the index and 2 for visitors. One request covers about 4,000 to 5,000 Monad blocks (half an hour) wherever the token is active, so a token that has been busy for months (USDC needs about 17,000 requests) cannot be indexed from its first transfer. The engine starts every backfill from block 0 in `full` mode and projects its cost from the pages it reads. When two pages in a row project past 120 requests (config `index.backfill_budget`), it switches to `activity` mode: it reads the last 20,000 blocks (about two hours) and from then on follows every address the token moves, reading each one's balance with `balanceOf`. `index.start_block` says where the index starts. In `activity` mode a holder that has not moved the token since `start_block` is missing, and the record says so in `coverage`.
+    - **On demand.** The first holder or transfer request for a Monad or Arc token queues its backfill and answers at once, with what the index holds so far and an `index` object: `state` is `queued`, then `indexing`, then `ready`. A token in `queued` or `indexing` answers 200 with partial data, never an error. After the backfill a tail keeps every ready token current, about once a minute, a few blocks behind the head. USDC and wrapped MON on Monad, and USDC and EURC on Arc, are queued when the engine starts.
+    - **One at a time.** One backfill runs at a time on each chain, and the index of each chain holds at most 50 tokens (config `index.max_tokens`). A token past that answers `state: unavailable` with an empty list.
+    - **Two modes.** The HyperSync key is free and shared with Sona's x402 indexer: 15 requests a minute for both, of which this engine uses at most 3 for the indexes of both chains together and 2 for visitors. One request covers about 4,000 to 5,000 Monad blocks (half an hour) wherever the token is active, so a token that has been busy for months (USDC needs about 17,000 requests) cannot be indexed from its first transfer. The engine starts every backfill from block 0 in `full` mode and projects its cost from the pages it reads. When two pages in a row project past 120 requests (config `index.backfill_budget`), it switches to `activity` mode: it reads the last 20,000 Monad blocks or 14,400 Arc blocks (about two hours each) and from then on follows every address the token moves, reading each one's balance with `balanceOf`. `index.start_block` says where the index starts. In `activity` mode a holder that has not moved the token since `start_block` is missing, and the record says so in `coverage`.
     - **Positions.** `index.indexed_block` is the last block applied, `index.head_block` the newest block HyperSync knows.
+    - **Arc's USDC.** USDC is Arc's native coin, and `0x3600000000000000000000000000000000000000` is its ERC-20 view: one balance, kept at 18 decimals by the chain and shown at 6 by the token. The system address `0xfffffffffffffffffffffffffffffffffffffffe` logs a `Transfer` at 18 decimals for every move of the coin, plain sends included, and the token contract logs a second `Transfer` only for a move made through it. The index reads USDC's moves from the system address alone, cut to 6 decimals, so no move counts twice and plain sends count. Gas fees move the coin without a log, so every balance the holder list and the holder map show for it is the holder's native balance, read with Multicall3's `getEthBalance` (the value `eth_getBalance` answers) at most 2 minutes earlier and cut to 6 decimals, and `activity` mode stores the same native balance. Its records say so with `token_native_coin`.
 
     ## The holder map
 
@@ -63,8 +64,8 @@ info:
 
     | Route | Source | Read every |
     |---|---|---|
-    | `GET /internal/v1/markets/top-coins` | CoinGecko `/coins/markets` (the 100 largest coins), and `/coins/list?include_platform=true` for the contract addresses on Ethereum and Monad | 5 minutes, addresses 24 hours; at most one CoinGecko request every 20 seconds |
-    | `GET /internal/v1/chains/{chain}/defi/tvl` | DefiLlama `/v2/historicalChainTvl/{Ethereum,Monad}` | 1 hour |
+    | `GET /internal/v1/markets/top-coins` | CoinGecko `/coins/markets` (the 100 largest coins), and `/coins/list?include_platform=true` for the contract addresses on Ethereum, Monad and Arc | 5 minutes, addresses 24 hours; at most one CoinGecko request every 20 seconds |
+    | `GET /internal/v1/chains/{chain}/defi/tvl` | DefiLlama `/v2/historicalChainTvl/{Ethereum,Monad,Arc}` | 1 hour |
     | `GET /internal/v1/chains/{chain}/defi/protocols` | DefiLlama `/protocols` | 1 hour |
     | `GET /internal/v1/chains/{chain}/defi/stablecoins` | DefiLlama stablecoins `/stablecoins` and `/stablecoincharts/{chain}` | 1 hour |
     | `GET /internal/v1/chains/{chain}/defi/dexs` | DefiLlama `/overview/dexs/{chain}` | 1 hour |
@@ -97,7 +98,7 @@ info:
     |---|---|---|
     | 400 | `invalid_query` | an unknown or repeated query parameter, a `limit` out of range, a `cursor` this engine did not make, or a search `q` that is not 2 to 64 characters once trimmed |
     | 400 | `invalid_id` | a `{chain}` that is no CAIP-2 id, or a `{token}` that is not `0x` and 40 hex digits |
-    | 404 | `unsupported_chain` | a CAIP-2 chain other than `eip155:1` and `eip155:143` |
+    | 404 | `unsupported_chain` | a CAIP-2 chain other than `eip155:1`, `eip155:143` and `eip155:5042` |
     | 404 | `not_found` | the address is not an ERC-20 token, or no route serves the path (`detail` is then `No such route.`) |
     | 500 | `internal` | anything unnamed, with the cause in the service log under the `X-Request-Id` |
     | 503 | `upstream_unavailable` | the chain, the database or the source a route needs did not answer. `retry_after_s` and `Retry-After` say when to try again, from 1 to 60 seconds |
@@ -112,7 +113,7 @@ info:
     - Successful answers carry no `Cache-Control` or `ETag`. Only `GET` is used.
 servers:
   - url: http://127.0.0.1:8221
-    description: tokens-engine on the host, serving Ethereum (eip155:1) and Monad (eip155:143)
+    description: tokens-engine on the host, serving Ethereum (eip155:1), Monad (eip155:143) and Arc (eip155:5042)
 tags:
   - name: Tokens
     description: |
@@ -125,7 +126,7 @@ tags:
       Coins, DeFi figures and on-chain activity of the served chains, read in the background and held in memory.
   - name: Status
     description: |
-      The sources, the HyperSync quota and the Monad index.
+      The sources, the HyperSync quota and the indexes of Monad and Arc.
   - name: Operations
     description: |
       Probes for the container health check. They have no body and no request ID.
@@ -144,12 +145,12 @@ paths:
 
         - `price_usd`: the current price from Sona's prices service, `null` when no price is known (coverage `token_price_unknown`).
         - `fdv_usd`: `total_supply` times `price_usd`, `null` without a price.
-        - `market_cap_usd`: the circulating market cap a provider reports (Blockscout on Ethereum, GeckoTerminal on Monad), `null` when it reports none. Providers take it from CoinGecko, which counts a token's supply on every chain, so for a bridged token such as USDC it is above this chain's `fdv_usd`. The record then holds `token_market_cap_multichain`.
-        - `holder_count` and `top10_share`: Blockscout's holder count and the share of the 10 largest holders on Ethereum, GeckoTerminal's on Monad (coverage `token_holder_count_provider`). On Monad the count falls back to the index when GeckoTerminal has none and the index of the token is complete.
-        - `logo_url`: the token's logo as an https URL, from the curated lists first, then Blockscout's `icon_url` (Ethereum) or GeckoTerminal's `image_url` (Monad). `null` when none gives one. Anything that is not an https URL is dropped.
+        - `market_cap_usd`: the circulating market cap a provider reports (Blockscout on Ethereum, GeckoTerminal on Monad and Arc), `null` when it reports none. Providers take it from CoinGecko, which counts a token's supply on every chain, so for a bridged token such as USDC it is above this chain's `fdv_usd`. The record then holds `token_market_cap_multichain`.
+        - `holder_count` and `top10_share`: Blockscout's holder count and the share of the 10 largest holders on Ethereum, GeckoTerminal's on Monad and Arc (coverage `token_holder_count_provider`). On Monad and Arc the count falls back to the index when GeckoTerminal has none and the index of the token is complete.
+        - `logo_url`: the token's logo as an https URL, from the curated lists first, then Blockscout's `icon_url` (Ethereum) or GeckoTerminal's `image_url` (Monad and Arc). `null` when none gives one. Anything that is not an https URL is dropped.
         - `sources`: the sources that answered, from `rpc`, `prices`, `blockscout`, `geckoterminal` and `sona_index`.
 
-        This route does not queue the token in the Monad index. It takes no query parameters.
+        This route does not queue the token in an index. It takes no query parameters.
       responses:
         "200":
           description: The address is a token.
@@ -184,9 +185,9 @@ paths:
         Call this for the holder table of a token page. Each item is a holder's `address`, its `balance` and its `share` of the total supply (`null` when the supply is 0). Pass `next_cursor` back as `cursor` for the next page; it is `null` on the last page. A cursor is opaque and belongs to the chain and token it came from.
 
         - On Ethereum the list is Blockscout's (`source: blockscout`, coverage `token_holders_ranked_by_provider`), with Blockscout's `is_contract` and its name tag or contract name as `label`. `index` is `null`. `holder_count` is Blockscout's.
-        - On Monad the list is the engine's index (`source: sona_index`), and `is_contract` and `label` are `null`. The first request for a token queues its backfill, and the answer is 200 with what is indexed so far and `index.state` `queued` or `indexing` (coverage `token_index_partial`). In `full` mode the balances are the sum of the token's transfers (coverage `token_balances_from_transfers`) and, once ready, `holder_count` is the index's own count. In `activity` mode (coverage `token_holders_from_activity`) the list holds the addresses active since `index.start_block` with their `balanceOf`, and `holder_count` is GeckoTerminal's. When the index is full the state is `unavailable` and the list is empty (coverage `token_index_unavailable`).
+        - On Monad and Arc the list is the engine's index of the chain (`source: sona_index`), and `is_contract` and `label` are `null`. The first request for a token queues its backfill, and the answer is 200 with what is indexed so far and `index.state` `queued` or `indexing` (coverage `token_index_partial`). In `full` mode the balances are the sum of the token's transfers (coverage `token_balances_from_transfers`) and, once ready, `holder_count` is the index's own count. In `activity` mode (coverage `token_holders_from_activity`) the list holds the addresses active since `index.start_block` with their `balanceOf`, and `holder_count` is GeckoTerminal's. When the index is full the state is `unavailable` and the list is empty (coverage `token_index_unavailable`). For Arc's USDC every balance is the holder's native balance (coverage `token_native_coin`), while the order and the cursor follow the stored balances.
 
-        Errors: 400 `invalid_query` for a `limit` out of range, a malformed cursor or another query key, 404 `not_found` when the address is no token, 503 when Blockscout does not answer on Ethereum or the database does not answer on Monad.
+        Errors: 400 `invalid_query` for a `limit` out of range, a malformed cursor or another query key, 404 `not_found` when the address is no token, 503 when Blockscout does not answer on Ethereum, the database does not answer on Monad and Arc, or the chain does not answer for Arc's USDC.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -224,7 +225,7 @@ paths:
         Call this for the "large transfers" table of a token page. Items are the largest `Transfer` events in `window`, largest first, then newest. A mint has `from` and a burn `to` the zero address. `window` gives the first and last block and their times.
 
         - On Ethereum (`source: hypersync`) the window is the last 7,200 blocks, about a day. For a busy token one HyperSync request covers only a few dozen blocks, so the engine shortens the window until three requests cover it, remembers that length for 6 hours, and says so with `token_transfer_window_cut`. The window is kept 15 minutes. When HyperSync fails or the quota is spent, the answer is the last good window of the token (kept 6 hours beyond the 15 minutes) with `token_transfer_window_older`, and only 503 with `retry_after_s` when the engine holds no copy; the read goes on in the background.
-        - On Monad (`source: sona_index`) the index keeps the 100 largest transfers of each UTC day over the last 7 days, from the token's backfill and tail. The window starts at the first block of the oldest day, or at `index.start_block` when the index starts later, and ends at `index.indexed_block`. The first request queues the token like the holder route, and `window` is `null` until the index has read a block.
+        - On Monad and Arc (`source: sona_index`) the index keeps the 100 largest transfers of each UTC day over the last 7 days, from the token's backfill and tail. Arc's USDC lists plain sends too, read from the system address (coverage `token_native_coin`). The window starts at the first block of the oldest day, or at `index.start_block` when the index starts later, and ends at `index.indexed_block`. The first request queues the token like the holder route, and `window` is `null` until the index has read a block.
 
         Errors: 400 `invalid_query` for a `limit` out of range or another query key, 404 `not_found` when the address is no token, 503 when HyperSync or the database does not answer.
       parameters:
@@ -255,11 +256,11 @@ paths:
       description: |
         Call this for the bubble map of a token page. `nodes` are the `limit` largest holders, largest first, each with its `balance` (the decimal value, as in `balance.value` of the holder route), its `share` of the total supply, Blockscout's `label`, its `kind` and its `cluster`. `links` are pairs of nodes that sent each other the token, and `clusters` the groups of nodes that links connect.
 
-        - **Nodes.** On Ethereum they are Blockscout's holder list (coverage `token_holders_ranked_by_provider`), read and kept 10 minutes like the holder route. `kind` is `contract` or `wallet` from Blockscout's `is_contract`. On Monad they are the engine's index, only when the token's index is complete (`full` mode and `ready`, coverage `token_balances_from_transfers`), with `kind: unknown` and no `label`. Otherwise the Monad list is partial, so `nodes` is empty (coverage `token_holder_map_index_incomplete`, or `token_index_unavailable` when the index cannot take the token). Like the holder route, the first call queues a Monad token in the index.
-        - **Links.** Ethereum only (on Monad `links.status` is `unavailable`, coverage `token_holder_map_links_ethereum_only`). A background read takes the token's `Transfer` logs of the last 30 days whose sender and receiver are both nodes, from HyperSync, in at most 8 requests. Each item is one unordered pair: `from` is the lower address of the two (not the sender), `transfers` counts the transfers in both directions and `amount` sums them in token units. Self transfers and the zero address are left out. `links.status` is:
+        - **Nodes.** On Ethereum they are Blockscout's holder list (coverage `token_holders_ranked_by_provider`), read and kept 10 minutes like the holder route. `kind` is `contract` or `wallet` from Blockscout's `is_contract`. On Monad and Arc they are the engine's index, only when the token's index is complete (`full` mode and `ready`, coverage `token_balances_from_transfers`), with `kind: unknown` and no `label`, and for Arc's USDC with native balances (coverage `token_native_coin`). Otherwise the list is partial, so `nodes` is empty (coverage `token_holder_map_index_incomplete`, or `token_index_unavailable` when the index cannot take the token). Like the holder route, the first call queues the token in the index.
+        - **Links.** Ethereum only (on Monad and Arc `links.status` is `unavailable`, coverage `token_holder_map_links_ethereum_only`). A background read takes the token's `Transfer` logs of the last 30 days whose sender and receiver are both nodes, from HyperSync, in at most 8 requests. Each item is one unordered pair: `from` is the lower address of the two (not the sender), `transfers` counts the transfers in both directions and `amount` sums them in token units. Self transfers and the zero address are left out. `links.status` is:
           - `building`: no read newer than 12 hours is stored, and one is queued or running. `items` is empty. Ask again in a minute or a few; a read takes 1 to 8 HyperSync requests at 2 a minute, after the reads queued before it.
           - `ready`: `items` holds the stored read, `built_at` says when it finished and `window_days` the days it covers. A busy token whose 30 days do not fit in 8 requests gets a shorter window that ends at the newest block (coverage `token_holder_map_window_cut`). A pair whose holder has left the node list since the read is dropped.
-          - `unavailable`: no read will come for now. Coverage says why: `token_holder_map_queue_full` (20 reads wait, ask again later), `token_holder_map_links_failed` (the last read failed, a new one is queued 10 minutes after the failure), or a Monad code.
+          - `unavailable`: no read will come for now. Coverage says why: `token_holder_map_queue_full` (20 reads wait, ask again later), `token_holder_map_links_failed` (the last read failed, a new one is queued 10 minutes after the failure), or an index code.
         - **Clusters.** The nodes that links connect, directly or through other nodes, form a cluster. Only clusters of two or more nodes are listed, largest `share` first; `id` is that rank from 1, and a node's `cluster` is its cluster's `id` (`null` for a node without links). `share` is the sum of the members' shares. A cluster says that the holders moved the token between each other, which can be one owner's wallets, an exchange and its hot wallets, or a pool and a router; it does not say they share an owner.
 
         Each `limit` is its own map with its own read. The answer is 200 whenever the token is one; errors: 400 `invalid_query` for a `limit` outside 50 to 250 or another query key, 404 `not_found` when the address is no token, 503 when Blockscout does not answer on Ethereum or the database does not answer.
@@ -295,7 +296,7 @@ paths:
     get:
       operationId: searchTokens
       tags: [Search]
-      summary: Find tokens by symbol or name on Ethereum and Monad
+      summary: Find tokens by symbol or name on Ethereum, Monad and Arc
       description: |
         Call this for the search box. `q` is trimmed and lowercased, and must be 2 to 64 characters. A token matches when its symbol starts with `q`, then when its name starts with `q`, then when its symbol contains it, then when its name does. A full address matches that token.
 
@@ -304,7 +305,7 @@ paths:
         1. **Verified tokens first.** A token on a curated list (see "Token search" in the description above) has `verified: true`. Among them the better match comes first (symbol prefix, name prefix, symbol contains, name contains), an exact symbol before a longer one, a token of an earlier list before a later one (Uniswap default, then the Monad list), then deeper pool liquidity.
         2. **The rest after,** with `verified: false`, by the same match order and then by the pool liquidity GeckoTerminal reports (the sum of `reserve_in_usd` of the pools found). A token that copies the name of a real one, such as another USDC, is on no list, so it can never come before the real token.
 
-        The long tail comes from GeckoTerminal's pool search, which the engine paces with the rest of its GeckoTerminal calls (20 a minute). One search spends one request per chain, and the answer is kept for 5 minutes. When GeckoTerminal does not answer within 3 seconds the route still answers 200 with the curated tokens and the code `token_search_long_tail_unavailable`. Tokens the Monad index already holds are included even if GeckoTerminal does not know them. The native coin MON is not a token and is not listed; wrapped MON is.
+        The long tail comes from GeckoTerminal's pool search, which the engine paces with the rest of its GeckoTerminal calls (20 a minute). One search spends one request per chain, and the answer is kept for 5 minutes. When GeckoTerminal does not answer within 3 seconds the route still answers 200 with the curated tokens and the code `token_search_long_tail_unavailable`. Tokens the indexes of Monad and Arc already hold are included even if GeckoTerminal does not know them. The native coin MON is not a token and is not listed; wrapped MON is.
 
         `logo_url` is an https URL from a list's `logoURI` or GeckoTerminal's `image_url`, `null` when there is none. A search with no match answers 200 with `items: []`. Errors: 400 `invalid_query` for a bad `q` or `limit` or another query key.
       parameters:
@@ -340,9 +341,9 @@ paths:
     get:
       operationId: getStatus
       tags: [Status]
-      summary: Get the state of the engine and its Monad index
+      summary: Get the state of the engine and its indexes
       description: |
-        Call this to see the chains served, the paid RPC calls (`paid_rpc_calls`, which should stay 0), the HyperSync quota use, and the Monad index: each token with its state, mode, first and last indexed block, holder count and the HyperSync requests its backfill spent, the backfill that runs now with its projected cost, when the tail last caught up, and the disk the index uses. `coverage` lists every coverage code the token records can carry, each with its sentence. It takes no query parameters.
+        Call this to see the chains served, the paid RPC calls (`paid_rpc_calls`, which should stay 0), the HyperSync quota use, and the index of each chain in `indexes` (`index` repeats the first, Monad's): each token with its state, mode, first and last indexed block, holder count and the HyperSync requests its backfill spent, the backfill that runs now with its projected cost, when the tail last caught up, and the disk the index uses. `coverage` lists every coverage code the token records can carry, each with its sentence. It takes no query parameters.
       responses:
         "200":
           description: The state of the engine.
@@ -362,7 +363,7 @@ paths:
       tags: [Markets]
       summary: List the largest coins by market cap
       description: |
-        Call this for the coins at the top of CoinGecko's market-cap ranking, with their price in USD, market cap, 24 hour change and logo. A coin that has a contract on Ethereum or Monad lists it in `tokens`, so a client can link the coin to `GET /internal/v1/chains/{chain}/tokens/{token}`; a coin with none (Bitcoin, Ethereum's own coin) has an empty list. The list is read from CoinGecko every 5 minutes in the background and held in memory, so a call never waits for CoinGecko. `as_of` is the newest `last_updated` CoinGecko gives. The contract addresses are read once a day. `limit` is 1 to 100, default 50. A coin without a price or market cap is left out.
+        Call this for the coins at the top of CoinGecko's market-cap ranking, with their price in USD, market cap, 24 hour change and logo. A coin that has a contract on Ethereum, Monad or Arc lists it in `tokens`, so a client can link the coin to `GET /internal/v1/chains/{chain}/tokens/{token}`; a coin with none (Bitcoin, Ethereum's own coin) has an empty list. The list is read from CoinGecko every 5 minutes in the background and held in memory, so a call never waits for CoinGecko. `as_of` is the newest `last_updated` CoinGecko gives. The contract addresses are read once a day. `limit` is 1 to 100, default 50. A coin without a price or market cap is left out.
       parameters:
         - {$ref: '#/components/parameters/CoinLimit'}
         - {$ref: '#/components/parameters/DeadlineMs'}
@@ -392,7 +393,7 @@ paths:
       tags: [Markets]
       summary: Get the total value locked of a chain, by day
       description: |
-        Call this for a chain's DeFi TVL history. `current_usd` is the last point, DefiLlama's TVL of the chain now. `change_1d_pct` and `change_7d_pct` compare it with the point 1 and 7 days before it, and are null when that day is missing. `days` is 30, 90, 365 or all, default 90. The last item is the current UTC day, still in progress. Only `eip155:1` and `eip155:143` are served. The figures come from DefiLlama, are read every hour and held in memory.
+        Call this for a chain's DeFi TVL history. `current_usd` is the last point, DefiLlama's TVL of the chain now. `change_1d_pct` and `change_7d_pct` compare it with the point 1 and 7 days before it, and are null when that day is missing. `days` is 30, 90, 365 or all, default 90. The last item is the current UTC day, still in progress. Only `eip155:1`, `eip155:143` and `eip155:5042` are served. The figures come from DefiLlama, are read every hour and held in memory.
       parameters:
         - {$ref: '#/components/parameters/TvlDays'}
       responses:
@@ -510,7 +511,7 @@ paths:
       tags: [Markets]
       summary: Get the daily on-chain activity of a chain
       description: |
-        Call this for six daily series of a chain: transactions, active accounts, new accounts, the average gas price in gwei, the transaction fees in ETH and the block utilization in percent. `days` is 30, 90 or 365, default 90. Only Ethereum (`eip155:1`) has them, from Blockscout's stats service; Monad answers 404 `unsupported_chain` because no source is wired for it. The last item is the current UTC day. Read every hour.
+        Call this for six daily series of a chain: transactions, active accounts, new accounts, the average gas price in gwei, the transaction fees in ETH and the block utilization in percent. `days` is 30, 90 or 365, default 90. Only Ethereum (`eip155:1`) has them, from Blockscout's stats service; Monad and Arc answer 404 `unsupported_chain` because no source is wired for them. The last item is the current UTC day. Read every hour.
       parameters:
         - {$ref: '#/components/parameters/SeriesDays'}
       responses:
@@ -807,7 +808,7 @@ components:
       type: object
       additionalProperties: false
       required: [state, mode, start_block, indexed_block, head_block]
-      description: How far the Monad index of the token is.
+      description: How far the index of the token is, on Monad and Arc.
       properties:
         state:
           type: string
@@ -816,7 +817,7 @@ components:
         mode:
           type: [string, "null"]
           enum: [full, activity, null]
-          description: '`full` from the first transfer, `activity` from `start_block` with balances read by balanceOf. Null while queued.'
+          description: '`full` from the first transfer, `activity` from `start_block` with balances read by balanceOf, or as native balances for Arc''s USDC. Null while queued.'
         start_block: {type: [integer, "null"], minimum: 0, description: 'The first block the index reads.'}
         indexed_block: {type: [integer, "null"], minimum: 0, description: 'The last block applied, null before the first.'}
         head_block: {type: [integer, "null"], minimum: 0, description: 'The newest block HyperSync knows.'}
@@ -828,8 +829,8 @@ components:
         address: {$ref: '#/components/schemas/Address'}
         balance: {$ref: '#/components/schemas/Amount'}
         share: {type: [number, "null"]}
-        is_contract: {type: [boolean, "null"], description: 'Blockscout''s flag on Ethereum, null on Monad.'}
-        label: {type: [string, "null"], maxLength: 80, description: 'Blockscout''s name tag or contract name on Ethereum, null on Monad or without one.'}
+        is_contract: {type: [boolean, "null"], description: 'Blockscout''s flag on Ethereum, null on Monad and Arc.'}
+        label: {type: [string, "null"], maxLength: 80, description: 'Blockscout''s name tag or contract name on Ethereum, null on Monad and Arc or without one.'}
     TokenHolders:
       type: object
       additionalProperties: false
@@ -846,7 +847,7 @@ components:
           oneOf:
             - {$ref: '#/components/schemas/IndexState'}
             - {type: "null"}
-          description: The Monad index of the token, null on Ethereum.
+          description: The index of the token on Monad and Arc, null on Ethereum.
         coverage: {$ref: '#/components/schemas/Coverage'}
     Window:
       type: object
@@ -881,7 +882,7 @@ components:
           oneOf:
             - {$ref: '#/components/schemas/Window'}
             - {type: "null"}
-          description: The blocks and times the items come from, null on Monad before the index has read a block.
+          description: The blocks and times the items come from, null on Monad and Arc before the index has read a block.
         items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Transfer'}}
         source: {type: string, enum: [hypersync, sona_index]}
         index:
@@ -897,8 +898,8 @@ components:
         address: {$ref: '#/components/schemas/Address'}
         balance: {type: string, pattern: '^[0-9]+(\.[0-9]*[1-9])?$', description: 'The holder''s balance in token units, exact, without trailing zeros.'}
         share: {type: [number, "null"], description: 'The balance over the total supply, null when the supply is 0.'}
-        label: {type: [string, "null"], maxLength: 80, description: 'Blockscout''s name tag or contract name on Ethereum, null on Monad or without one.'}
-        kind: {type: string, enum: [contract, wallet, unknown], description: '`contract` or `wallet` from Blockscout''s `is_contract` on Ethereum, `unknown` on Monad.'}
+        label: {type: [string, "null"], maxLength: 80, description: 'Blockscout''s name tag or contract name on Ethereum, null on Monad and Arc or without one.'}
+        kind: {type: string, enum: [contract, wallet, unknown], description: '`contract` or `wallet` from Blockscout''s `is_contract` on Ethereum, `unknown` on Monad and Arc.'}
         cluster: {type: [integer, "null"], minimum: 1, description: 'The `id` of the node''s cluster, null when the node has no link.'}
     MapLink:
       type: object
