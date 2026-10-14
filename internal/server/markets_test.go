@@ -24,14 +24,27 @@ type mkSvc struct {
 
 func newMarketsHandler(t *testing.T, loaded bool) http.Handler {
 	t.Helper()
-	service, f := fixture.Service(t)
 	var m *markets.Service
 	if loaded {
 		m, _ = fixture.Markets(t)
 	} else {
 		m, _ = fixture.NewMarkets(t)
 	}
+	return marketsHandler(t, m)
+}
+
+func marketsHandler(t *testing.T, m *markets.Service) http.Handler {
+	t.Helper()
+	service, f := fixture.Service(t)
 	return New(&mkSvc{svc: &svc{Service: service, f: f, ready: true}, Service: m}, NewMetrics())
+}
+
+// newMonadCountHandler serves Monad's activity counted from its blocks, as the engine's config has it
+func newMonadCountHandler(t *testing.T) http.Handler {
+	t.Helper()
+	m, _ := fixture.NewMarketsWithMonadCount(t, fixture.MonadLines{"newTxns": 4687248, "averageGasPrice": 111.08, "networkUtilization": 0.0803})
+	fixture.RefreshMarkets(t, m)
+	return marketsHandler(t, m)
 }
 
 const (
@@ -43,6 +56,7 @@ type marketCase struct {
 	name, path string
 	status     int
 	unloaded   bool
+	monadCount bool
 	header     []string
 }
 
@@ -72,6 +86,7 @@ func marketCases() []marketCase {
 		{name: "activity of Ethereum", path: chainEth + "/activity"},
 		{name: "activity of Ethereum over 30 days", path: chainEth + "/activity?days=30"},
 		{name: "activity of Monad", path: chainMon + "/activity", status: 404},
+		{name: "activity of Monad counted from its blocks", path: chainMon + "/activity?days=30", monadCount: true},
 		{name: "activity of another chain", path: "/internal/v1/chains/eip155:10/activity", status: 404},
 	}
 }
@@ -84,7 +99,12 @@ func TestMarketRoutesFollowTheSpec(t *testing.T) {
 	}
 	for _, c := range marketCases() {
 		t.Run(c.name, func(t *testing.T) {
-			h := newMarketsHandler(t, !c.unloaded)
+			var h http.Handler
+			if c.monadCount {
+				h = newMonadCountHandler(t)
+			} else {
+				h = newMarketsHandler(t, !c.unloaded)
+			}
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			req := httptest.NewRequestWithContext(ctx, http.MethodGet, specHost+c.path, nil)

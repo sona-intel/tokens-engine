@@ -1,6 +1,7 @@
 package fixture
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -88,16 +89,37 @@ func NewMarkets(t testing.TB) (*markets.Service, *MarketFakes) {
 // NewMarketsWithKey is NewMarkets with a CoinGecko demo key, which every CoinGecko request must carry
 func NewMarketsWithKey(t testing.TB, key string) (*markets.Service, *MarketFakes) {
 	t.Helper()
-	return newMarkets(t, key, false)
+	return newMarkets(t, key, false, nil)
+}
+
+// NewMarketsWithMonadCount is NewMarkets with Monad's activity counted from its blocks by count, as the engine's config has it
+func NewMarketsWithMonadCount(t testing.TB, count markets.StatsSource) (*markets.Service, *MarketFakes) {
+	t.Helper()
+	return newMarkets(t, "", false, count)
+}
+
+// MonadLines answers the lines a count of Monad's blocks keeps, the same value on the day before Now and on Now's day, counted to 10 minutes before Now
+type MonadLines map[string]float64
+
+func (m MonadLines) StatsLine(_ context.Context, id, _, _ string) ([]sources.StatPoint, error) {
+	v, ok := m[id]
+	if !ok {
+		return nil, markets.ErrNoStatsLine
+	}
+	return []sources.StatPoint{{Day: Now.AddDate(0, 0, -1).Format(time.DateOnly), Value: v}, {Day: Now.Format(time.DateOnly), Value: v}}, nil
+}
+
+func (MonadLines) CountedTo(context.Context) (time.Time, error) {
+	return Now.Add(-10 * time.Minute), nil
 }
 
 // NewMarketsWithArc is NewMarkets with Arc added as a chain that has activity only: refresh its activity alone, no DeFi recording covers Arc
 func NewMarketsWithArc(t testing.TB) (*markets.Service, *MarketFakes) {
 	t.Helper()
-	return newMarkets(t, "", true)
+	return newMarkets(t, "", true, nil)
 }
 
-func newMarkets(t testing.TB, key string, arc bool) (*markets.Service, *MarketFakes) {
+func newMarkets(t testing.TB, key string, arc bool, monad markets.StatsSource) (*markets.Service, *MarketFakes) {
 	t.Helper()
 	f := &MarketFakes{now: Now, Requests: map[string]int{}, CoinKey: key}
 	files := map[string][]byte{}
@@ -130,15 +152,24 @@ func newMarkets(t testing.TB, key string, arc bool) (*markets.Service, *MarketFa
 	if arc {
 		cfg.Chains = append(cfg.Chains, config.MarketChain{ID: Arc, LlamaName: "Arc", Activity: true, StatsURL: "https://explorer.arc.io", FeesMetric: "fees_usdc"})
 	}
+	stats := map[string]markets.StatsSource{
+		Ethereum: sources.NewBlockscout(srv.URL, 1000).WithHTTPClient(srv.Client()),
+		Arc:      sources.NewBlockscout(srv.URL+"/arc", 1000).WithHTTPClient(srv.Client()),
+	}
+	if monad != nil {
+		for i, c := range cfg.Chains {
+			if c.ID == Monad {
+				cfg.Chains[i].Activity, cfg.Chains[i].ActivitySource = true, config.ActivityBlocks
+			}
+		}
+		stats[Monad] = monad
+	}
 	s := markets.New(markets.Deps{
 		Config:    cfg,
 		CoinGecko: sources.NewCoinGecko(srv.URL+"/cg", f.CoinKey, cfg.CoinGeckoGap).WithHTTPClient(srv.Client()),
 		Llama:     sources.NewLlama(srv.URL+"/llama", srv.URL+"/stable", cfg.LlamaPerMinute).WithHTTPClient(srv.Client()),
-		Stats: map[string]markets.StatsSource{
-			Ethereum: sources.NewBlockscout(srv.URL, 1000).WithHTTPClient(srv.Client()),
-			Arc:      sources.NewBlockscout(srv.URL+"/arc", 1000).WithHTTPClient(srv.Client()),
-		},
-		Now: f.clock,
+		Stats:     stats,
+		Now:       f.clock,
 	})
 	return s, f
 }
