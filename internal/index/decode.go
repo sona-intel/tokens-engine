@@ -1,4 +1,4 @@
-// Package index keeps the holder index of a chain: a backfill per token from HyperSync, then one tail for every ready token
+// Package index keeps the holder index of a chain, with a backfill per token from HyperSync and one tail for every ready token
 package index
 
 import (

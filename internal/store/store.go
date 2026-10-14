@@ -1,4 +1,4 @@
-// Package store keeps the token indexes of every chain in Postgres: the indexed tokens, current balances and recent large transfers
+// Package store keeps the token indexes of every chain in Postgres, with the indexed tokens, current balances and recent large transfers
 package store
 
 import (

@@ -266,8 +266,7 @@ func (s *Service) geckoSearch(ctx context.Context, network, q string) ([]sources
 	return hits, err
 }
 
-// indexedMetas reads name and symbol of the tokens the index of a chain holds, which GeckoTerminal may not know.
-// A token whose contract does not answer is left out.
+// indexedMetas reads name and symbol of the tokens a chain's index holds, which GeckoTerminal may not know
 func (s *Service) indexedMetas(ctx context.Context, chain string) ([]evm.Address, []Meta) {
 	addrs, err := s.d.Store.IndexedTokens(ctx, chain)
 	if err != nil {
