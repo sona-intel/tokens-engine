@@ -1,0 +1,1 @@
+{"from_block": 113178240, "to_block": 113178280, "include_all_blocks": true, "transactions": [{}], "field_selection": {"block": ["number", "timestamp", "gas_used", "gas_limit"], "transaction": ["block_number", "from", "gas_price"]}, "max_num_transactions": 50000}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Records the real answers the tests read. Run from the repository root:
 
-    python3 -I testdata/tools/record.py rpc|blockscout|gecko|prices|hypersync|lists|search|holdermap|arc
+    python3 -I testdata/tools/record.py rpc|blockscout|gecko|prices|hypersync|lists|search|holdermap|arc|blockstats
 
 rpc needs the RPC router on 127.0.0.1:4000, prices the prices service on 127.0.0.1:8210,
 hypersync the key in ENVIO_HYPERSYNC_KEY (it is sent, never written). Every file holds the
@@ -189,6 +189,18 @@ def record_hypersync():
               "logs": [{"address": [ETH_MKR], "topics": [[TRANSFER]]}], "field_selection": fields, "max_num_logs": 50000})
 
 
+# block 113,178,260 is the first Monad block of 2026-10-14 UTC, so the page holds 20 blocks of each day
+MON_MIDNIGHT = 113178260
+
+
+def record_blockstats():
+    """The block query of Monad's chain activity: every block with its gas, and every transaction's block, sender and gas price"""
+    hypersync("monad.hypersync.xyz", "monad_blocks", {"from_block": MON_MIDNIGHT - 20, "to_block": MON_MIDNIGHT + 20,
+              "include_all_blocks": True, "transactions": [{}],
+              "field_selection": {"block": ["number", "timestamp", "gas_used", "gas_limit"], "transaction": ["block_number", "from", "gas_price"]},
+              "max_num_transactions": 50000})
+
+
 ETH_UNI = "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
 # about 30 days of 12-second Ethereum slots
 MAP_WINDOW_BLOCKS = 216000
@@ -297,4 +309,4 @@ def record_arc():
 
 if __name__ == "__main__":
     {"rpc": record_rpc, "blockscout": record_blockscout, "gecko": record_gecko, "prices": record_prices, "hypersync": record_hypersync, "lists": record_lists, "search": record_search,
-     "holdermap": record_holdermap, "arc": record_arc}[sys.argv[1]]()
+     "holdermap": record_holdermap, "arc": record_arc, "blockstats": record_blockstats}[sys.argv[1]]()

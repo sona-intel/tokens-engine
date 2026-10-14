@@ -209,31 +209,40 @@ func (h *HyperSync) Page(ctx context.Context, chain string, q LogQuery, prio Pri
 	if err != nil {
 		return Page{}, fmt.Errorf("hypersync request: %w", err)
 	}
+	raw, err := h.send(ctx, endpoint, body, prio)
+	if err != nil {
+		return Page{}, err
+	}
+	return ParsePage(raw)
+}
+
+// send posts one query and waits out a 429, up to interactiveAttempts or backgroundAttempts tries
+func (h *HyperSync) send(ctx context.Context, endpoint string, body []byte, prio Priority) ([]byte, error) {
 	attempts, pacer := backgroundAttempts, h.pacers[Background]
 	if prio != Background {
 		attempts, pacer = interactiveAttempts, h.pacers[Interactive]
 	}
 	for attempt := 1; ; attempt++ {
 		if err := pacer.Wait(ctx, prio); err != nil {
-			return Page{}, err
+			return nil, err
 		}
 		h.requests.Add(1)
 		raw, hdr, err := h.post(ctx, endpoint, body)
 		h.noteQuota(hdr)
 		if err == nil {
-			return ParsePage(raw)
+			return raw, nil
 		}
 		var se *StatusError
 		if !errors.As(err, &se) {
 			h.failed.Add(1)
 			if ctx.Err() != nil {
-				return Page{}, ctx.Err()
+				return nil, ctx.Err()
 			}
 			if attempt >= attempts {
-				return Page{}, &UnavailableError{Source: hyperSyncName, RetryAfter: 5 * time.Second, Err: err}
+				return nil, &UnavailableError{Source: hyperSyncName, RetryAfter: 5 * time.Second, Err: err}
 			}
 			if err := h.sleep(ctx, serverErrorPause); err != nil {
-				return Page{}, err
+				return nil, err
 			}
 			continue
 		}
@@ -247,14 +256,14 @@ func (h *HyperSync) Page(ctx context.Context, chain string, q LogQuery, prio Pri
 			wait = max(wait, serverErrorPause)
 		default:
 			h.failed.Add(1)
-			return Page{}, fmt.Errorf("hypersync: %w", se)
+			return nil, fmt.Errorf("hypersync: %w", se)
 		}
 		if attempt >= attempts {
-			return Page{}, &UnavailableError{Source: hyperSyncName, RetryAfter: wait, Err: se}
+			return nil, &UnavailableError{Source: hyperSyncName, RetryAfter: wait, Err: se}
 		}
 		if se.Status >= 500 {
 			if err := h.sleep(ctx, wait); err != nil {
-				return Page{}, err
+				return nil, err
 			}
 		}
 	}
