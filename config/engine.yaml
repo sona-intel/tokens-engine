@@ -105,8 +105,8 @@ markets:
   defi_refresh: 1h
   activity_refresh: 1h
   # Monad has no keyless stats service, so the engine counts its activity from HyperSync block pages on the background
-  # lane, about 190 to 430 requests a day at the head. backfill_days stays 0 here, because 90 days are about 17,000 to
-  # 38,000 requests, which need their own key or a budget decision on the server
+  # lane, about 190 to 430 requests a day at the head. backfill_days stays 0 on every deployment, because 90 days are
+  # about 17,000 to 38,000 requests and Sona has no other HyperSync key, so the series fill one day at a time
   block_stats:
     poll: 10m
     backfill_days: 0

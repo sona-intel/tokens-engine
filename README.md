@@ -44,7 +44,7 @@ One HyperSync request covers about 4,000 to 5,000 Monad blocks (half an hour of 
 
 Arc adds no request to the quota: its index shares the 3 a minute with Monad's. Each chain's tail sends about 1 request a minute while it holds a ready token, so with both tails running the backfills of both chains share what is left, about 1 a minute, half of what Monad's backfills had alone. Arc's USDC is read from the system emitter, which logs every move of the coin, so it is the busiest feed of the engine and runs in `activity` mode.
 
-Monad's activity count shares the background 3 a minute too: about 190 to 430 requests a day at the head, with no backfill unless `markets.block_stats.backfill_days` is set, which `RULES.md` says needs its own key.
+Monad's activity count shares the background 3 a minute too: about 190 to 430 requests a day at the head, and no backfill, so Monad's series fill one day at a time (`RULES.md` says why).
 
 ## API
 
