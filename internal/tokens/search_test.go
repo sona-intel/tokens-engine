@@ -217,6 +217,23 @@ func TestSearchUncuratedFindsTheIndexedToken(t *testing.T) {
 	}
 }
 
+// No list holds an Arc token, so the USDC of the Arc index is found unverified, after the listed tokens of the other chains
+func TestSearchFindsTheArcIndex(t *testing.T) {
+	svc, f := fixture.WithArc(t)
+	f.GeckoDown = true
+	out := search(t, svc, "usdc", 20)
+	verifiedFirst(t, out)
+	i := slices.IndexFunc(out.Items, func(it tokens.SearchItem) bool {
+		return it.Chain == fixture.Arc && it.Token == fixture.ArcUSDC.String()
+	})
+	if i < 0 || out.Items[i].Verified || sym(out.Items[i]) != "USDC" || out.Items[i].Decimals != 6 {
+		t.Fatalf("items %+v", out.Items)
+	}
+	if !slices.Equal(out.Coverage, []string{"token_search_long_tail_unavailable", "token_search_unverified"}) {
+		t.Errorf("coverage %v", out.Coverage)
+	}
+}
+
 func TestSearchListsNotLoaded(t *testing.T) {
 	svc, _ := fixture.ListsFailed(t)
 	out := search(t, svc, "usdc", 8)

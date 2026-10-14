@@ -22,6 +22,8 @@ var (
 	SelTotalSupply = [4]byte{0x18, 0x16, 0x0d, 0xdd}
 	SelBalanceOf   = [4]byte{0x70, 0xa0, 0x82, 0x31}
 	selAggregate3  = [4]byte{0x82, 0xad, 0x56, 0xcb}
+	// SelGetEthBalance is Multicall3's getEthBalance(address), the native balance eth_getBalance answers
+	SelGetEthBalance = [4]byte{0x4d, 0x23, 0x01, 0xcc}
 
 	// TopicTransfer is Transfer(address,address,uint256)
 	TopicTransfer = MustHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
@@ -37,6 +39,14 @@ var ErrShort = errors.New("return data is shorter than one word")
 func BalanceOfCall(holder Address) []byte {
 	out := make([]byte, 4+wordSize)
 	copy(out, SelBalanceOf[:])
+	copy(out[4+12:], holder[:])
+	return out
+}
+
+// EthBalanceCall is the calldata of getEthBalance(holder), sent to Multicall3 itself
+func EthBalanceCall(holder Address) []byte {
+	out := make([]byte, 4+wordSize)
+	copy(out, SelGetEthBalance[:])
 	copy(out[4+12:], holder[:])
 	return out
 }

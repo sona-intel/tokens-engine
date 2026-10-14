@@ -24,6 +24,7 @@ var (
 	monWMON  = evm.MustAddress("0x3bd359c1119da7da1d913d1c4d2b7c461115433a")
 	deadAddr = evm.MustAddress("0x000000000000000000000000000000000000dead")
 	ethUNI   = evm.MustAddress("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984")
+	arcUSDC  = evm.MustAddress("0x3600000000000000000000000000000000000000")
 )
 
 // recorded serves testdata files by request path and query, a missing route answers 404 with an empty JSON object
@@ -140,6 +141,8 @@ func TestGeckoRecorded(t *testing.T) {
 		"/networks/monad/tokens/" + monUSDC.String():            "gecko/token.usdc.json",
 		"/networks/monad/tokens/" + monWMON.String() + "/info":  "gecko/info.wmon.json",
 		"/networks/monad/tokens/" + deadAddr.String() + "/info": "gecko/info.unknown.json",
+		"/networks/arc/tokens/" + arcUSDC.String() + "/info":    "gecko/info.arc_usdc.json",
+		"/networks/arc/tokens/" + arcUSDC.String():              "gecko/token.arc_usdc.json",
 	})
 	// the recorded unknown token is a real 404 body, served here with status 200 by the table, so route it as 404
 	g := NewGecko(srv.URL, 600)
@@ -159,6 +162,14 @@ func TestGeckoRecorded(t *testing.T) {
 	mc, err := g.MarketCap(ctx, "monad", monUSDC)
 	if err != nil || mc == nil || *mc < 7e10 {
 		t.Errorf("USDC market cap %v %v", mc, err)
+	}
+	// one client reads every chain, each call names its network
+	a, err := g.Holders(ctx, "arc", arcUSDC)
+	if err != nil || a.Count == nil || *a.Count != 37270 || a.Top10Share == nil || *a.Top10Share != 0.397904 {
+		t.Errorf("Arc USDC holders %+v %v", a, err)
+	}
+	if mc, err := g.MarketCap(ctx, "arc", arcUSDC); err != nil || mc == nil || *mc < 7e10 {
+		t.Errorf("Arc USDC market cap %v %v", mc, err)
 	}
 	// GeckoTerminal's real answer for an unknown token
 	if !strings.Contains(string(testkit.Read(t, "gecko/info.unknown.json")), "Not Found") {

@@ -2,7 +2,10 @@ package tokens
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/big"
 	"net/url"
 	"strconv"
@@ -12,6 +15,7 @@ import (
 	"tokens/internal/cache"
 	"tokens/internal/config"
 	"tokens/internal/evm"
+	"tokens/internal/index"
 	"tokens/internal/rpc"
 	"tokens/internal/sources"
 	"tokens/internal/store"
@@ -110,6 +114,7 @@ type Service struct {
 	blockAt  *cache.Cache[uint64]
 	gtSearch *cache.Cache[[]sources.GeckoHit]
 	idxMeta  *cache.Cache[Meta]
+	natives  *cache.Cache[[]*big.Int]
 
 	// learned is the transfer window that fit the HyperSync budget last time, per Ethereum token
 	learned sync.Map
@@ -133,6 +138,7 @@ func New(d Deps) *Service {
 		blockAt:   cache.New[uint64](64, fetchTimeout),
 		gtSearch:  cache.New[[]sources.GeckoHit](512, searchFetch),
 		idxMeta:   cache.New[Meta](cacheEntries, fetchTimeout),
+		natives:   cache.New[[]*big.Int](512, fetchTimeout),
 	}
 }
 
@@ -260,6 +266,47 @@ func (s *Service) geckoCap(ctx context.Context, network string, token evm.Addres
 	return s.gtCap.Get(ctx, network+"/"+token.String(), ttlOK[*float64](s.d.Config.GeckoCache), func(ctx context.Context) (*float64, error) {
 		return s.d.Gecko.MarketCap(ctx, network, token)
 	})
+}
+
+// nativeBalances swaps the stored balances of a native coin's ERC-20 view for its native balances in the token's decimals
+func (s *Service) nativeBalances(ctx context.Context, cfg config.Chain, client Chain, token evm.Address, decimals uint8, rows []store.Balance) ([]store.Balance, error) {
+	if cfg.NativeToken(token) == nil || len(rows) == 0 {
+		return rows, nil
+	}
+	f := index.FeedOf(cfg, token, decimals)
+	sum := sha256.New()
+	for _, r := range rows {
+		sum.Write(r.Holder[:])
+	}
+	key := cfg.ID + "/" + token.String() + "/" + hex.EncodeToString(sum.Sum(nil))
+	// gas moves the coin without a log, so a balance summed from logs or read at the last move can be off
+	vals, err := s.natives.Get(ctx, key, ttlOK[[]*big.Int](s.d.Config.MetaCache), func(ctx context.Context) ([]*big.Int, error) {
+		calls := make([]evm.Call3, len(rows))
+		for i, r := range rows {
+			calls[i] = f.BalanceCall(r.Holder)
+		}
+		res, err := client.Aggregate3(ctx, calls)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]*big.Int, len(rows))
+		for i, r := range res {
+			v, ok := f.Balance(r)
+			if !ok {
+				return nil, fmt.Errorf("getEthBalance of %s did not answer", rows[i].Holder)
+			}
+			out[i] = v
+		}
+		return out, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]store.Balance, len(rows))
+	for i, r := range rows {
+		out[i] = store.Balance{Holder: r.Holder, Balance: vals[i]}
+	}
+	return out, nil
 }
 
 func (s *Service) header(ctx context.Context, chain string, client Chain, n uint64) (rpc.Header, error) {

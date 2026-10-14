@@ -264,6 +264,9 @@ func (s *Service) indexWindow(ctx context.Context, out *Transfers, cfg config.Ch
 	if t.Mode == store.ModeActivity {
 		notes = append(notes, CovFromActivity)
 	}
+	if cfg.NativeToken(token) != nil {
+		notes = append(notes, CovNativeCoin)
+	}
 	cutoffDay := index.CutoffDay(s.now(), s.d.Config.Index.WindowDays)
 	rows, err := s.d.Store.TopTransfers(ctx, t.ID, cutoffDay, limit)
 	if err != nil {

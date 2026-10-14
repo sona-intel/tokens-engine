@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -42,6 +43,31 @@ type Chain struct {
 	ActivityWindowBlocks uint64
 	// Prewarm are the tokens the index of this chain queues on start
 	Prewarm []evm.Address
+	// Native is the token that is the ERC-20 view of the chain's native coin, nil when the chain has none
+	Native *Native
+}
+
+// Native is a token that shares one balance with the native coin, whose every move a system address logs as a Transfer
+type Native struct {
+	Token    evm.Address
+	Emitter  evm.Address
+	Decimals uint8
+}
+
+// ToToken cuts an amount of the native coin to the token's decimals, as the token's balanceOf does
+func (n Native) ToToken(v *big.Int, decimals uint8) *big.Int {
+	if decimals >= n.Decimals {
+		return v
+	}
+	return new(big.Int).Quo(v, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n.Decimals-decimals)), nil))
+}
+
+// NativeToken is the chain's Native when token is its ERC-20 view, nil for any other token
+func (c Chain) NativeToken(token evm.Address) *Native {
+	if c.Native != nil && c.Native.Token == token {
+		return c.Native
+	}
+	return nil
 }
 
 // TokenList is a curated token list in the Uniswap token list format, the earlier a list the higher its rank
@@ -143,15 +169,22 @@ func (s Secret) MarshalText() ([]byte, error) { return []byte(s.String()), nil }
 func (s Secret) LogValue() slog.Value { return slog.StringValue(s.String()) }
 
 type chainFile struct {
-	ID                   string   `yaml:"id"`
-	Name                 string   `yaml:"name"`
-	RPCURL               string   `yaml:"rpc_url"`
-	HyperSyncURL         string   `yaml:"hypersync_url"`
-	Holders              string   `yaml:"holders"`
-	WrappedNative        string   `yaml:"wrapped_native"`
-	GeckoNetwork         string   `yaml:"gecko_network"`
-	ActivityWindowBlocks uint64   `yaml:"activity_window_blocks"`
-	Prewarm              []string `yaml:"prewarm"`
+	ID                   string      `yaml:"id"`
+	Name                 string      `yaml:"name"`
+	RPCURL               string      `yaml:"rpc_url"`
+	HyperSyncURL         string      `yaml:"hypersync_url"`
+	Holders              string      `yaml:"holders"`
+	WrappedNative        string      `yaml:"wrapped_native"`
+	GeckoNetwork         string      `yaml:"gecko_network"`
+	ActivityWindowBlocks uint64      `yaml:"activity_window_blocks"`
+	Prewarm              []string    `yaml:"prewarm"`
+	Native               *nativeFile `yaml:"native"`
+}
+
+type nativeFile struct {
+	Token    string `yaml:"token"`
+	Emitter  string `yaml:"emitter"`
+	Decimals int    `yaml:"decimals"`
 }
 
 type tokenListFile struct {
@@ -297,6 +330,9 @@ func (f file) build() (Config, error) {
 		for _, p := range c.Prewarm {
 			ch.Prewarm = append(ch.Prewarm, evm.MustAddress(p))
 		}
+		if n := c.Native; n != nil {
+			ch.Native = &Native{Token: evm.MustAddress(n.Token), Emitter: evm.MustAddress(n.Emitter), Decimals: uint8(n.Decimals)}
+		}
 		cfg.Chains = append(cfg.Chains, ch)
 	}
 	for _, l := range f.TokenLists {
@@ -385,15 +421,21 @@ func (f file) validateChains() error {
 			return fmt.Errorf("gecko_network of %s is not a network id", c.ID)
 		case c.Holders != HoldersBlockscout && c.Holders != HoldersIndex:
 			return fmt.Errorf("holders of %s must be %s or %s", c.ID, HoldersBlockscout, HoldersIndex)
-		case c.Holders != HoldersIndex && (c.ActivityWindowBlocks > 0 || len(c.Prewarm) > 0):
-			return fmt.Errorf("activity_window_blocks and prewarm of %s need holders: %s", c.ID, HoldersIndex)
+		case c.Holders != HoldersIndex && (c.ActivityWindowBlocks > 0 || len(c.Prewarm) > 0 || c.Native != nil):
+			return fmt.Errorf("activity_window_blocks, prewarm and native of %s need holders: %s", c.ID, HoldersIndex)
 		}
+		var wrapped evm.Address
 		if c.WrappedNative != "" {
-			if _, err := evm.ParseAddress(c.WrappedNative); err != nil {
+			a, err := evm.ParseAddress(c.WrappedNative)
+			if err != nil {
 				return fmt.Errorf("wrapped_native of %s: %w", c.ID, err)
 			}
+			wrapped = a
 		}
 		if err := c.validatePrewarm(f.Index.MaxTokens); err != nil {
+			return err
+		}
+		if err := c.Native.validate(c.ID, wrapped); err != nil {
 			return err
 		}
 		seen[c.ID], seen[c.Name] = true, true
@@ -415,6 +457,23 @@ func (c chainFile) validatePrewarm(maxTokens int) error {
 			return fmt.Errorf("prewarm of %s lists %s twice", c.ID, a)
 		}
 		seen[a] = true
+	}
+	return nil
+}
+
+func (n *nativeFile) validate(chain string, wrapped evm.Address) error {
+	if n == nil {
+		return nil
+	}
+	token, err1 := evm.ParseAddress(n.Token)
+	emitter, err2 := evm.ParseAddress(n.Emitter)
+	switch {
+	case err1 != nil || err2 != nil:
+		return fmt.Errorf("native of %s: %w", chain, errors.Join(err1, err2))
+	case token.IsZero() || emitter.IsZero() || token == emitter || token == wrapped:
+		return fmt.Errorf("native of %s needs a token and an emitter, two different addresses that are not zero or wrapped_native", chain)
+	case n.Decimals < 1 || n.Decimals > 36:
+		return fmt.Errorf("native.decimals of %s must be 1 to 36, got %d", chain, n.Decimals)
 	}
 	return nil
 }

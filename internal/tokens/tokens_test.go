@@ -1,15 +1,20 @@
 package tokens_test
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"math"
 	"math/big"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"tokens/internal/evm"
 	"tokens/internal/fixture"
+	"tokens/internal/index"
 	"tokens/internal/sources"
+	"tokens/internal/testkit"
 	"tokens/internal/tokens"
 )
 
@@ -375,5 +380,158 @@ func TestHolderMapMonad(t *testing.T) {
 	}
 	if f.MapLogs.Calls != 0 || f.Maps.Stats().Queued != 0 {
 		t.Error("a Monad map queued a HyperSync read")
+	}
+}
+
+// arcNative is the recorded eth_getBalance of each holder on Arc, cut to USDC's 6 decimals
+func arcNative(t *testing.T) map[string]*big.Int {
+	t.Helper()
+	var (
+		req []struct {
+			ID     int      `json:"id"`
+			Params []string `json:"params"`
+		}
+		resp []struct {
+			ID     int    `json:"id"`
+			Result string `json:"result"`
+		}
+	)
+	if err := errors.Join(json.Unmarshal(testkit.Read(t, "rpc/getbalance.arc_usdc.request.json"), &req), json.Unmarshal(testkit.Read(t, "rpc/getbalance.arc_usdc.json"), &resp)); err != nil {
+		t.Fatal(err)
+	}
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(12), nil)
+	out := map[string]*big.Int{}
+	for _, r := range resp {
+		v, ok := new(big.Int).SetString(strings.TrimPrefix(r.Result, "0x"), 16)
+		if !ok || r.ID < 0 || r.ID >= len(req) {
+			t.Fatalf("answer %d is malformed", r.ID)
+		}
+		out[strings.ToLower(req[r.ID].Params[0])] = v.Quo(v, scale)
+	}
+	return out
+}
+
+func TestInfoArc(t *testing.T) {
+	svc, f := fixture.WithArc(t)
+	info, err := svc.Info(t.Context(), fixture.Arc, fixture.ArcUSDC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *info.Symbol != "USDC" || info.Decimals != 6 || info.TotalSupply.Decimals != 6 {
+		t.Errorf("metadata %+v", info)
+	}
+	// the holder figures come from GeckoTerminal's arc network, the prices fixture has no Arc price
+	if info.HolderCount == nil || *info.HolderCount != 37270 || info.Top10Share == nil || *info.Top10Share != 0.397904 || info.MarketCapUSD == nil || info.LogoURL == nil {
+		t.Errorf("holders %v top10 %v mcap %v logo %v", info.HolderCount, info.Top10Share, info.MarketCapUSD, info.LogoURL)
+	}
+	if !slices.Equal(info.Sources, []string{"rpc", "prices", "geckoterminal"}) || !slices.Equal(info.Coverage, []string{"token_price_unknown", "token_holder_count_provider"}) {
+		t.Errorf("sources %v coverage %v", info.Sources, info.Coverage)
+	}
+	if f.EnsureCalls != 0 || f.NativeCalls != 0 {
+		t.Error("token info queued the token or read native balances")
+	}
+}
+
+// Every USDC balance listed is the holder's native balance, read once a page and kept, not what 20 recorded blocks add up to
+func TestHoldersArcUSDCAreNativeBalances(t *testing.T) {
+	svc, f := fixture.WithArc(t)
+	ctx := t.Context()
+	native := arcNative(t)
+	p := fixture.ArcPage(t)
+	_, moves := index.FeedOf(fixture.ArcChain(), fixture.ArcUSDC, 6).Moves(p.Logs, 0, p.NextBlock)
+	stored := index.Deltas(moves)
+	h, err := svc.Holders(ctx, fixture.Arc, fixture.ArcUSDC, 5, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Source != "sona_index" || h.Index == nil || h.Index.State != "ready" || len(h.Items) != 5 || h.NextCursor == nil || h.HolderCount == nil || *h.HolderCount != 37270 {
+		t.Fatalf("holders %+v", h)
+	}
+	if !slices.Equal(h.Coverage, []string{"token_holders_from_activity", "token_native_coin", "token_holder_count_provider"}) {
+		t.Errorf("coverage %v", h.Coverage)
+	}
+	next, err := svc.Holders(ctx, fixture.Arc, fixture.ArcUSDC, 5, *h.NextCursor)
+	if err != nil || len(next.Items) != 5 || next.Items[0].Address == h.Items[4].Address {
+		t.Fatalf("next page %+v %v", next.Items, err)
+	}
+	differ := 0
+	for _, it := range append(h.Items, next.Items...) {
+		want, ok := native[it.Address]
+		if !ok || it.Balance.Raw != want.String() || it.Balance.Decimals != 6 || it.Share == nil {
+			t.Errorf("%s holds %+v, its native balance is %v", it.Address, it.Balance, want)
+		}
+		if stored[evm.MustAddress(it.Address)].Cmp(want) != 0 {
+			differ++
+		}
+	}
+	if differ == 0 {
+		t.Error("every native balance equals the stored one, so the check is untested")
+	}
+	if _, err := svc.Holders(ctx, fixture.Arc, fixture.ArcUSDC, 5, ""); err != nil || f.NativeCalls != 2 {
+		t.Errorf("%d getEthBalance batches for two pages read three times, %v", f.NativeCalls, err)
+	}
+	// EURC is no native coin, it is queued like any token and nothing reads native balances for it
+	eurc, err := svc.Holders(ctx, fixture.Arc, fixture.ArcEURC, 5, "")
+	if err != nil || eurc.Index.State != "queued" || slices.Contains(eurc.Coverage, "token_native_coin") || f.NativeCalls != 2 {
+		t.Errorf("EURC %+v %v", eurc, err)
+	}
+}
+
+// Arc's USDC transfers are the system emitter's logs, plain sends included, each move once and in 6 decimals
+func TestTransfersArcUSDCFromTheSystemEmitter(t *testing.T) {
+	svc, _ := fixture.WithArc(t)
+	tr, err := svc.Transfers(t.Context(), fixture.Arc, fixture.ArcUSDC, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Window == nil || tr.Window.FromBlock != 25941000 || tr.Window.ToBlock != 25941019 || tr.Window.FromTime != "2026-10-14T15:07:55Z" || tr.Window.ToTime != "2026-10-14T15:08:05Z" {
+		t.Fatalf("window %+v", tr.Window)
+	}
+	if len(tr.Items) != 100 || !slices.Equal(tr.Coverage, []string{"token_holders_from_activity", "token_native_coin"}) {
+		t.Fatalf("%d items, coverage %v", len(tr.Items), tr.Coverage)
+	}
+	p := fixture.ArcPage(t)
+	emitted := map[string]sources.Log{}
+	viaToken := map[string]bool{}
+	for _, l := range p.Logs {
+		switch l.Address {
+		case fixture.ArcEmitter:
+			emitted[l.TxHash.String()+"/"+new(big.Int).SetUint64(l.LogIndex).String()] = l
+		case fixture.ArcUSDC:
+			viaToken[l.TxHash.String()] = true
+		}
+	}
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(12), nil)
+	plain := 0
+	for _, it := range tr.Items {
+		l, ok := emitted[it.Tx+"/"+new(big.Int).SetUint64(it.LogIndex).String()]
+		if !ok || it.Amount.Decimals != 6 || it.Amount.Raw != new(big.Int).Quo(new(big.Int).SetBytes(l.Data), scale).String() {
+			t.Fatalf("item %+v is no emitter log in 6 decimals", it)
+		}
+		if !viaToken[it.Tx] {
+			plain++
+		}
+	}
+	if plain == 0 {
+		t.Error("no plain send among the transfers")
+	}
+}
+
+func TestHolderMapArcUSDC(t *testing.T) {
+	svc, f := fixture.WithArc(t)
+	f.IndexMode = "full"
+	native := arcNative(t)
+	m, err := svc.HolderMap(t.Context(), fixture.Arc, fixture.ArcUSDC, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Nodes) != len(native) || m.Links.Status != "unavailable" ||
+		!slices.Equal(m.Coverage, []string{"token_balances_from_transfers", "token_native_coin", "token_holder_map_links_ethereum_only"}) {
+		t.Fatalf("map %+v", m)
+	}
+	for _, n := range m.Nodes {
+		if want := native[n.Address]; want == nil || n.Balance != tokens.FormatUnits(want, 6) || n.Kind != "unknown" {
+			t.Errorf("node %+v, native balance %v", n, want)
+		}
 	}
 }

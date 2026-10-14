@@ -2,9 +2,11 @@
 package fixture
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +31,7 @@ import (
 const (
 	Ethereum = "eip155:1"
 	Monad    = "eip155:143"
+	Arc      = "eip155:5042"
 )
 
 var (
@@ -38,6 +41,10 @@ var (
 	EthEOA  = evm.MustAddress("0x37305b1cd40574e4c5ce33f8e8306be057fd7341")
 	MonUSDC = evm.MustAddress("0x754704bc059f8c67012fed69bc8a327a5aafb603")
 	MonWMON = evm.MustAddress("0x3bd359c1119da7da1d913d1c4d2b7c461115433a")
+	// ArcUSDC is the ERC-20 view of Arc's native USDC, whose every move ArcEmitter logs at 18 decimals
+	ArcUSDC    = evm.MustAddress("0x3600000000000000000000000000000000000000")
+	ArcEmitter = evm.MustAddress("0xfffffffffffffffffffffffffffffffffffffffe")
+	ArcEURC    = evm.MustAddress("0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1")
 )
 
 // Now is a time on the day the sources were recorded
@@ -58,6 +65,8 @@ type Fakes struct {
 	IndexMode   string
 	HyperCalls  int
 	EnsureCalls int
+	// NativeCalls counts the getEthBalance batches the Arc chain answered
+	NativeCalls int
 
 	// Maps builds the holder maps from MapLogs into MapStore, BuildMaps runs its queue
 	Maps      *holdermap.Builder
@@ -98,6 +107,12 @@ func ListsFailed(t testing.TB) (*tokens.Service, *Fakes) {
 	return build(t, listsFailed)
 }
 
+// WithArc is the same service serving Arc too, its index holding the USDC rows of the recorded Arc logs
+func WithArc(t testing.TB) (*tokens.Service, *Fakes) {
+	t.Helper()
+	return build(t, withArc)
+}
+
 type listMode int
 
 const (
@@ -105,6 +120,7 @@ const (
 	uncurated
 	listsFailed
 	shortCache
+	withArc
 )
 
 func build(t testing.TB, mode listMode) (*tokens.Service, *Fakes) {
@@ -113,6 +129,9 @@ func build(t testing.TB, mode listMode) (*tokens.Service, *Fakes) {
 	cfg := Config()
 	if mode == shortCache {
 		cfg.TransfersCache = 20 * time.Millisecond
+	}
+	if mode == withArc {
+		cfg.Chains = append(cfg.Chains, ArcChain())
 	}
 	bs := serve(t, f, map[string]string{
 		"/api/v2/tokens/" + EthUSDC.String():              "blockscout/token.usdc.json",
@@ -132,6 +151,10 @@ func build(t testing.TB, mode listMode) (*tokens.Service, *Fakes) {
 			geckoRoutes["/search/pools?include=base_token%2Cquote_token&network="+network+"&query="+q] = "gecko/search." + network + "." + q + ".json"
 		}
 	}
+	if mode == withArc {
+		geckoRoutes["/networks/arc/tokens/"+ArcUSDC.String()+"/info"] = "gecko/info.arc_usdc.json"
+		geckoRoutes["/networks/arc/tokens/"+ArcUSDC.String()] = "gecko/token.arc_usdc.json"
+	}
 	gt := serve(t, f, geckoRoutes, func(f *Fakes) bool { return f.GeckoDown })
 	listFiles := serve(t, f, map[string]string{
 		"/uniswap": "lists/uniswap.json", "/monad": "lists/monad.json",
@@ -149,25 +172,74 @@ func build(t testing.TB, mode listMode) (*tokens.Service, *Fakes) {
 		lists = tokens.NewLists(cfg, sources.NewTokenLists(time.Second))
 		lists.Load(t.Context())
 	}
-	usdc := page(t, "monad_usdc")
-	idx := &fakeIndex{f: f, page: usdc}
+	mon, _ := cfg.Chain(Monad)
+	// the recorded query starts at block 113,000,000
+	idx := &fakeIndex{f: f, chain: Monad, id: 1, start: 113000000, feed: index.FeedOf(mon, MonUSDC, 6), page: page(t, "monad_usdc")}
 	eth := newChain(t, "ethereum")
+	chains := map[string]tokens.Chain{Ethereum: eth, Monad: newChain(t, "monad")}
+	indexes := map[string]tokens.Index{Monad: idx}
+	held := fakeStore{idx}
+	if mode == withArc {
+		arcIdx := &fakeIndex{f: f, chain: Arc, id: 3, start: 25941000, feed: index.FeedOf(ArcChain(), ArcUSDC, 6), page: ArcPage(t)}
+		arc := newChain(t, "arc")
+		arc.f, arc.native = f, recordedNative(t, arcIdx.feed, arcIdx.rows())
+		chains[Arc], indexes[Arc], held = arc, arcIdx, append(held, arcIdx)
+	}
 	f.MapLogs, f.MapStore, f.mapBlocks = NewMapLogs(UNIMapPages(t), UNIMapHead), NewMapStore(), mapBlocks{c: eth}
 	f.Maps = holdermap.New(cfg.HolderMap, f.MapLogs, f.MapStore, slog.New(slog.DiscardHandler)).WithClock(func() time.Time { return Now })
 	svc := tokens.New(tokens.Deps{
 		Config:     cfg,
-		Chains:     map[string]tokens.Chain{Ethereum: eth, Monad: newChain(t, "monad")},
+		Chains:     chains,
 		Blockscout: sources.NewBlockscout(bs.URL, 1000),
 		Gecko:      sources.NewGecko(gt.URL, 6000),
 		Prices:     sources.NewPrices(pr.URL),
 		Logs:       &fakeLogs{f: f, page: page(t, "eth_mkr"), head: 26180999},
-		Indexes:    map[string]tokens.Index{Monad: idx},
-		Store:      idx,
+		Indexes:    indexes,
+		Store:      held,
 		Lists:      lists,
 		HolderMaps: f.Maps,
 		Now:        func() time.Time { return Now },
 	})
 	return svc, f
+}
+
+// ArcChain is Arc as the engine's config has it
+func ArcChain() config.Chain {
+	return config.Chain{
+		ID: Arc, Name: "arc", Holders: config.HoldersIndex, GeckoNetwork: "arc", ActivityWindowBlocks: 14400,
+		Native: &config.Native{Token: ArcUSDC, Emitter: ArcEmitter, Decimals: 18},
+	}
+}
+
+// ArcPage is the recorded eth_getLogs answer of Arc blocks 25,941,000 to 25,941,019 as a HyperSync page
+func ArcPage(t testing.TB) sources.Page {
+	t.Helper()
+	p, err := sources.ParsePage(testkit.LogsPage(t, "rpc/logs.arc_usdc.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// recordedNative is the recorded getEthBalance answer of each holder, the recording must have asked for exactly these holders
+func recordedNative(t testing.TB, f index.Feed, rows []store.Balance) map[evm.Address]evm.Result3 {
+	t.Helper()
+	calls := make([]evm.Call3, len(rows))
+	for i, r := range rows {
+		calls[i] = f.BalanceCall(r.Holder)
+	}
+	if !bytes.Equal(evm.EncodeAggregate3(calls), testkit.CallData(t, "rpc/ethbalance.arc_usdc.request.json")) {
+		t.Fatal("the recorded getEthBalance calls are not the holders of the recorded logs")
+	}
+	res, err := evm.DecodeAggregate3(testkit.Result(t, "rpc/ethbalance.arc_usdc.json"), len(rows))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make(map[evm.Address]evm.Result3, len(rows))
+	for i, r := range rows {
+		out[r.Holder] = res[i]
+	}
+	return out
 }
 
 // Config is the engine's own config with the Ethereum window cut to the recorded 1,000 blocks
@@ -223,6 +295,9 @@ func serve(t testing.TB, f *Fakes, routes map[string]string, down func(*Fakes) b
 type chain struct {
 	meta    map[evm.Address][]evm.Result3
 	headers map[uint64]rpc.Header
+	// native answers getEthBalance by holder, f counts the batches
+	native map[evm.Address]evm.Result3
+	f      *Fakes
 }
 
 func newChain(t testing.TB, name string) *chain {
@@ -234,6 +309,8 @@ func newChain(t testing.TB, name string) *chain {
 		files = map[string]evm.Address{"eth_usdc": EthUSDC, "eth_mkr": EthMKR, "eth_eoa": EthEOA, "eth_uni": EthUNI}
 	case "monad":
 		files = map[string]evm.Address{"monad_usdc": MonUSDC, "monad_wmon": MonWMON}
+	case "arc":
+		files = map[string]evm.Address{"arc_usdc": ArcUSDC, "arc_eurc": ArcEURC}
 	}
 	for file, token := range files {
 		res, err := evm.DecodeAggregate3(testkit.Result(t, "rpc/meta."+file+".json"), 4)
@@ -242,7 +319,7 @@ func newChain(t testing.TB, name string) *chain {
 		}
 		c.meta[token] = res
 	}
-	headers := map[string][]uint64{"ethereum": {26180000, 26180999, UNIMapFrom, UNIMapHead}, "monad": {1, 113000000, 113000039}}[name]
+	headers := map[string][]uint64{"ethereum": {26180000, 26180999, UNIMapFrom, UNIMapHead}, "monad": {1, 113000000, 113000039}, "arc": {25941000, 25941019}}[name]
 	for _, n := range headers {
 		num, at := testkit.Header(t, "rpc/header."+name+"_"+itoa(n)+".json")
 		c.headers[n] = rpc.Header{Number: num, Time: at}
@@ -255,6 +332,9 @@ func itoa(n uint64) string { return new(big.Int).SetUint64(n).String() }
 var errUnrecorded = errors.New("no recording for this call")
 
 func (c *chain) Aggregate3(_ context.Context, calls []evm.Call3) ([]evm.Result3, error) {
+	if len(calls) > 0 && calls[0].Target == evm.Multicall3 {
+		return c.nativeBalances(calls)
+	}
 	if len(calls) != 4 {
 		return nil, errUnrecorded
 	}
@@ -263,6 +343,24 @@ func (c *chain) Aggregate3(_ context.Context, calls []evm.Call3) ([]evm.Result3,
 		return nil, errUnrecorded
 	}
 	return res, nil
+}
+
+func (c *chain) nativeBalances(calls []evm.Call3) ([]evm.Result3, error) {
+	out := make([]evm.Result3, len(calls))
+	for i, call := range calls {
+		if call.Target != evm.Multicall3 || len(call.Data) != 36 || !bytes.Equal(call.Data[:4], evm.SelGetEthBalance[:]) {
+			return nil, errUnrecorded
+		}
+		r, ok := c.native[evm.Address(call.Data[16:])]
+		if !ok {
+			return nil, errUnrecorded
+		}
+		out[i] = r
+	}
+	c.f.mu.Lock()
+	c.f.NativeCalls++
+	c.f.mu.Unlock()
+	return out, nil
 }
 
 func (c *chain) HeaderByNumber(_ context.Context, n uint64) (rpc.Header, error) {
@@ -309,25 +407,27 @@ func (l *fakeLogs) PausedFor() time.Duration { return 0 }
 
 /* Index */
 
-// fakeIndex holds Monad USDC in activity mode over the recorded page, with the positive balance changes of that page as its rows
+// fakeIndex holds one token over the recorded page read through the token's feed, its rows the positive balance changes
 type fakeIndex struct {
-	f    *Fakes
-	page sources.Page
+	f     *Fakes
+	chain string
+	id    int32
+	start uint64
+	feed  index.Feed
+	page  sources.Page
 }
 
-func (x *fakeIndex) Chain() string { return Monad }
+func (x *fakeIndex) Chain() string { return x.chain }
 
 func (x *fakeIndex) row() store.Token {
-	// the recorded query starts at block 113,000,000
-	start := uint64(113000000)
 	return store.Token{
-		ID: 1, Chain: Monad, Token: MonUSDC, State: x.f.IndexState, Mode: x.f.IndexMode, Decimals: 6,
-		StartBlock: start, NextBlock: x.page.NextBlock, Holders: int64(len(x.rows())),
+		ID: x.id, Chain: x.chain, Token: x.feed.Token, State: x.f.IndexState, Mode: x.f.IndexMode, Decimals: x.feed.Decimals,
+		StartBlock: x.start, NextBlock: x.page.NextBlock, Holders: int64(len(x.rows())),
 	}
 }
 
 func (x *fakeIndex) Lookup(_ context.Context, token evm.Address) (store.Token, bool, error) {
-	if token != MonUSDC {
+	if token != x.feed.Token {
 		return store.Token{}, false, nil
 	}
 	return x.row(), true, nil
@@ -338,32 +438,19 @@ func (x *fakeIndex) Ensure(_ context.Context, token evm.Address, decimals uint8)
 	x.f.EnsureCalls++
 	full := x.f.IndexFull
 	x.f.mu.Unlock()
-	if full && token != MonUSDC {
+	if full && token != x.feed.Token {
 		return store.Token{}, store.ErrFull
 	}
-	if token != MonUSDC {
-		return store.Token{ID: 2, Chain: Monad, Token: token, State: store.StateQueued, Mode: store.ModeFull, Decimals: decimals}, nil
+	if token != x.feed.Token {
+		return store.Token{ID: x.id + 1, Chain: x.chain, Token: token, State: store.StateQueued, Mode: store.ModeFull, Decimals: decimals}, nil
 	}
 	return x.row(), nil
-}
-
-func (x *fakeIndex) IndexedTokens(context.Context, string) ([]evm.Address, error) {
-	return []evm.Address{MonUSDC}, nil
 }
 
 func (x *fakeIndex) Head(context.Context) uint64 { return x.page.ArchiveHeight }
 
 func (x *fakeIndex) moves() ([]sources.Log, []index.Move) {
-	var (
-		logs  []sources.Log
-		moves []index.Move
-	)
-	for _, l := range x.page.Logs {
-		if m, ok := index.Decode(l, false); ok {
-			logs, moves = append(logs, l), append(moves, m)
-		}
-	}
-	return logs, moves
+	return x.feed.Moves(x.page.Logs, 0, math.MaxUint64)
 }
 
 func (x *fakeIndex) rows() []store.Balance {
@@ -383,10 +470,7 @@ func (x *fakeIndex) rows() []store.Balance {
 	return out
 }
 
-func (x *fakeIndex) Holders(_ context.Context, id int32, limit int, after *store.HolderCursor) ([]store.Balance, error) {
-	if id != 1 {
-		return nil, nil
-	}
+func (x *fakeIndex) holders(limit int, after *store.HolderCursor) []store.Balance {
 	rows := x.rows()
 	if after != nil {
 		i := slices.IndexFunc(rows, func(b store.Balance) bool {
@@ -394,18 +478,45 @@ func (x *fakeIndex) Holders(_ context.Context, id int32, limit int, after *store
 			return c < 0 || c == 0 && b.Holder.String() > after.Holder.String()
 		})
 		if i < 0 {
-			return nil, nil
+			return nil
 		}
 		rows = rows[i:]
 	}
-	return rows[:min(limit, len(rows))], nil
+	return rows[:min(limit, len(rows))]
 }
 
-func (x *fakeIndex) TopTransfers(_ context.Context, id int32, fromDay string, limit int) ([]store.Transfer, error) {
-	if id != 1 {
-		return nil, nil
-	}
+func (x *fakeIndex) transfers(fromDay string, limit int) []store.Transfer {
 	logs, moves := x.moves()
 	out := index.Largest(logs, moves, fromDay, 100)
-	return out[:min(limit, len(out))], nil
+	return out[:min(limit, len(out))]
+}
+
+// fakeStore answers the reads of the service from the fake index whose token row has the asked id
+type fakeStore []*fakeIndex
+
+func (s fakeStore) Holders(_ context.Context, id int32, limit int, after *store.HolderCursor) ([]store.Balance, error) {
+	for _, x := range s {
+		if x.id == id {
+			return x.holders(limit, after), nil
+		}
+	}
+	return nil, nil
+}
+
+func (s fakeStore) TopTransfers(_ context.Context, id int32, fromDay string, limit int) ([]store.Transfer, error) {
+	for _, x := range s {
+		if x.id == id {
+			return x.transfers(fromDay, limit), nil
+		}
+	}
+	return nil, nil
+}
+
+func (s fakeStore) IndexedTokens(_ context.Context, chain string) ([]evm.Address, error) {
+	for _, x := range s {
+		if x.chain == chain {
+			return []evm.Address{x.feed.Token}, nil
+		}
+	}
+	return nil, nil
 }

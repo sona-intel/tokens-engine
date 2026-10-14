@@ -5,15 +5,33 @@ import (
 	"testing"
 	"time"
 
+	"tokens/internal/config"
 	"tokens/internal/evm"
 	"tokens/internal/sources"
 	"tokens/internal/testkit"
 )
 
 var (
-	monUSDC = evm.MustAddress("0x754704bc059f8c67012fed69bc8a327a5aafb603")
-	monWMON = evm.MustAddress("0x3bd359c1119da7da1d913d1c4d2b7c461115433a")
+	monUSDC    = evm.MustAddress("0x754704bc059f8c67012fed69bc8a327a5aafb603")
+	monWMON    = evm.MustAddress("0x3bd359c1119da7da1d913d1c4d2b7c461115433a")
+	arcUSDC    = evm.MustAddress("0x3600000000000000000000000000000000000000")
+	arcEmitter = evm.MustAddress("0xfffffffffffffffffffffffffffffffffffffffe")
+	arcEURC    = evm.MustAddress("0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1")
 )
+
+func arcChain() config.Chain {
+	return config.Chain{ID: arc, Name: "arc", Native: &config.Native{Token: arcUSDC, Emitter: arcEmitter, Decimals: 18}}
+}
+
+// arcPage is the recorded eth_getLogs answer of 20 Arc blocks with the Transfer logs of the emitter, USDC and EURC
+func arcPage(t *testing.T) sources.Page {
+	t.Helper()
+	p, err := sources.ParsePage(testkit.LogsPage(t, "rpc/logs.arc_usdc.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
 
 func page(t *testing.T, name string) sources.Page {
 	t.Helper()
@@ -89,6 +107,94 @@ func TestWrappedNativeMintsAndBurns(t *testing.T) {
 	for _, m := range wrapped {
 		if !m.Transfer && !m.From.IsZero() && !m.To.IsZero() {
 			t.Fatalf("a deposit or withdrawal names two holders: %+v", m)
+		}
+	}
+}
+
+// USDC's feed counts every recorded move once in 6 decimals, the ones made through the token and the plain sends alike
+func TestArcUSDCFeedIsTheSystemEmitter(t *testing.T) {
+	p := arcPage(t)
+	f := FeedOf(arcChain(), arcUSDC, 6)
+	if f.Source != arcEmitter || f.Native == nil || f.Wrapped {
+		t.Fatalf("feed %+v", f)
+	}
+	type move struct {
+		tx       evm.Hash
+		from, to evm.Address
+		amount   string
+	}
+	var emitted, erc20 int
+	viaToken := map[move]int{}
+	tokenTxs := map[evm.Hash]bool{}
+	for _, l := range p.Logs {
+		switch l.Address {
+		case arcEmitter:
+			emitted++
+		case arcUSDC:
+			m, ok := Decode(l, false)
+			if !ok {
+				t.Fatalf("an ERC-20 log of USDC does not decode: %+v", l)
+			}
+			erc20++
+			viaToken[move{l.TxHash, m.From, m.To, m.Amount.String()}]++
+			tokenTxs[l.TxHash] = true
+		}
+	}
+	kept, moves := f.Moves(p.Logs, 0, p.NextBlock)
+	if emitted == 0 || erc20 == 0 || len(kept) != emitted {
+		t.Fatalf("%d of %d emitter logs kept, %d ERC-20 logs", len(kept), emitted, erc20)
+	}
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(12), nil)
+	plain, cut := 0, 0
+	for i, l := range kept {
+		if l.Address != arcEmitter {
+			t.Fatalf("a log of %s was read for USDC", l.Address)
+		}
+		raw := new(big.Int).SetBytes(l.Data)
+		q, r := new(big.Int).QuoRem(raw, scale, new(big.Int))
+		if moves[i].Amount.Cmp(q) != 0 {
+			t.Fatalf("log %d/%d: %s at 18 decimals became %s", l.Block, l.LogIndex, raw, moves[i].Amount)
+		}
+		if r.Sign() != 0 {
+			cut++
+		}
+		if !tokenTxs[l.TxHash] {
+			plain++
+		}
+		viaToken[move{l.TxHash, moves[i].From, moves[i].To, moves[i].Amount.String()}]--
+	}
+	// every ERC-20 log repeats one emitter log of its transaction, so reading the emitter alone counts each move once
+	for m, n := range viaToken {
+		if n > 0 {
+			t.Errorf("the ERC-20 log %+v has no emitter log", m)
+		}
+	}
+	if plain == 0 || cut == 0 {
+		t.Errorf("%d moves of plain sends and %d amounts below 6 decimals, the recording should hold both", plain, cut)
+	}
+	// value moves between holders, so the deltas add up to what was minted less what was burned
+	net := new(big.Int)
+	for _, m := range moves {
+		if m.From.IsZero() {
+			net.Add(net, m.Amount)
+		}
+		if m.To.IsZero() {
+			net.Sub(net, m.Amount)
+		}
+	}
+	if got := sum(Deltas(moves)); got.Cmp(net) != 0 {
+		t.Errorf("deltas add to %s, mints less burns are %s", got, net)
+	}
+
+	// any other Arc token reads its own logs, as on every chain
+	eurc := FeedOf(arcChain(), arcEURC, 6)
+	kept, moves = eurc.Moves(p.Logs, 0, p.NextBlock)
+	if eurc.Source != arcEURC || eurc.Native != nil || len(kept) == 0 {
+		t.Fatalf("EURC feed %+v kept %d", eurc, len(kept))
+	}
+	for i, l := range kept {
+		if l.Address != arcEURC || moves[i].Amount.Cmp(new(big.Int).SetBytes(l.Data)) != 0 {
+			t.Errorf("EURC log %d/%d read as %+v", l.Block, l.LogIndex, moves[i])
 		}
 	}
 }

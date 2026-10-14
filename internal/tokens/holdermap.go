@@ -68,7 +68,7 @@ type HolderMap struct {
 
 // HolderMap answers the largest holders of a token with the links between them that a background build found
 func (s *Service) HolderMap(ctx context.Context, chain string, token evm.Address, limit int) (HolderMap, error) {
-	cfg, _, err := s.chain(chain)
+	cfg, client, err := s.chain(chain)
 	if err != nil {
 		return HolderMap{}, err
 	}
@@ -94,7 +94,7 @@ func (s *Service) HolderMap(ctx context.Context, chain string, token evm.Address
 		}
 		notes = append(notes, CovHoldersPartial)
 	} else {
-		if holders, err = s.fullIndexHolders(ctx, cfg, token, meta, limit, &notes); err != nil {
+		if holders, err = s.fullIndexHolders(ctx, cfg, client, token, meta, limit, &notes); err != nil {
 			return HolderMap{}, err
 		}
 		notes = append(notes, CovMapLinksEthereumOnly)
@@ -123,7 +123,7 @@ func (s *Service) HolderMap(ctx context.Context, chain string, token evm.Address
 }
 
 // fullIndexHolders is the index's list when the index of the token is complete, nil otherwise; the call queues a new token like the holder route
-func (s *Service) fullIndexHolders(ctx context.Context, cfg config.Chain, token evm.Address, meta Meta, limit int, notes *[]Note) ([]Holder, error) {
+func (s *Service) fullIndexHolders(ctx context.Context, cfg config.Chain, client Chain, token evm.Address, meta Meta, limit int, notes *[]Note) ([]Holder, error) {
 	t, state, err := s.ensureIndexed(ctx, cfg.ID, token, meta.Decimals)
 	if err != nil {
 		return nil, err
@@ -140,6 +140,12 @@ func (s *Service) fullIndexHolders(ctx context.Context, cfg config.Chain, token 
 	rows, err := s.d.Store.Holders(ctx, t.ID, limit, nil)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.NativeToken(token) != nil {
+		*notes = append(*notes, CovNativeCoin)
+		if rows, err = s.nativeBalances(ctx, cfg, client, token, meta.Decimals, rows); err != nil {
+			return nil, err
+		}
 	}
 	out := make([]Holder, 0, len(rows))
 	for _, r := range rows {

@@ -78,7 +78,7 @@ func pageMap(v url.Values) map[string]string {
 
 // Holders pages the holders of a token, largest first
 func (s *Service) Holders(ctx context.Context, chain string, token evm.Address, limit int, cur string) (Holders, error) {
-	cfg, _, err := s.chain(chain)
+	cfg, client, err := s.chain(chain)
 	if err != nil {
 		return Holders{}, err
 	}
@@ -100,7 +100,7 @@ func (s *Service) Holders(ctx context.Context, chain string, token evm.Address, 
 		if len(c.Page) > 0 || c.Offset > 0 {
 			return Holders{}, ErrBadCursor
 		}
-		err = s.indexPage(ctx, &out, cfg, token, meta, limit, c)
+		err = s.indexPage(ctx, &out, cfg, client, token, meta, limit, c)
 	}
 	if err != nil {
 		return Holders{}, err
@@ -170,7 +170,7 @@ func (s *Service) blockscoutList(ctx context.Context, token evm.Address, meta Me
 	return items, next, nil
 }
 
-func (s *Service) indexPage(ctx context.Context, out *Holders, cfg config.Chain, token evm.Address, meta Meta, limit int, c cursor) error {
+func (s *Service) indexPage(ctx context.Context, out *Holders, cfg config.Chain, client Chain, token evm.Address, meta Meta, limit int, c cursor) error {
 	out.Source = SourceIndex
 	var after *store.HolderCursor
 	if c.Balance != "" || c.Holder != "" {
@@ -207,6 +207,13 @@ func (s *Service) indexPage(ctx context.Context, out *Holders, cfg config.Chain,
 			last := rows[limit-1]
 			out.NextCursor = cursor{Balance: last.Balance.String(), Holder: last.Holder.String()}.encode()
 			rows = rows[:limit]
+		}
+		if cfg.NativeToken(token) != nil {
+			notes = append(notes, CovNativeCoin)
+			// the cursor above holds the stored balance, the order of the pages follows it
+			if rows, err = s.nativeBalances(ctx, cfg, client, token, meta.Decimals, rows); err != nil {
+				return err
+			}
 		}
 		for _, r := range rows {
 			out.Items = append(out.Items, Holder{Address: r.Holder.String(), Balance: NewAmount(r.Balance, meta.Decimals), Share: ratio(r.Balance, meta.TotalSupply)})

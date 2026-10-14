@@ -7,10 +7,77 @@ import (
 	"slices"
 	"time"
 
+	"tokens/internal/config"
 	"tokens/internal/evm"
 	"tokens/internal/sources"
 	"tokens/internal/store"
 )
+
+// Feed is where the index reads the moves of one token, from the token's own logs or from the system emitter of a native coin
+type Feed struct {
+	Token evm.Address
+	// Source is the address whose logs carry the token's moves
+	Source  evm.Address
+	Wrapped bool
+	// Native is set for the ERC-20 view of the native coin, whose amounts and balances are cut to Decimals
+	Native   *config.Native
+	Decimals uint8
+}
+
+// FeedOf is the feed of a token of the chain, given the token's decimals
+func FeedOf(chain config.Chain, token evm.Address, decimals uint8) Feed {
+	f := Feed{Token: token, Source: token, Wrapped: token == chain.WrappedNative, Decimals: decimals}
+	if n := chain.NativeToken(token); n != nil {
+		// the emitter logs every move of the coin, the token's own Transfer logs repeat the ERC-20 ones and are left out
+		f.Source, f.Native = n.Emitter, n
+	}
+	return f
+}
+
+// Moves keeps the feed's logs in [from, end) that decode, with their moves in the same order, in the token's decimals
+func (f Feed) Moves(logs []sources.Log, from, end uint64) ([]sources.Log, []Move) {
+	var (
+		kept  []sources.Log
+		moves []Move
+	)
+	for _, l := range logs {
+		if l.Address != f.Source || l.Block < from || l.Block >= end {
+			continue
+		}
+		m, ok := Decode(l, f.Wrapped)
+		if !ok {
+			continue
+		}
+		if f.Native != nil {
+			m.Amount = f.Native.ToToken(m.Amount, f.Decimals)
+		}
+		kept, moves = append(kept, l), append(moves, m)
+	}
+	return kept, moves
+}
+
+// BalanceCall reads the balance of one holder, the native balance through Multicall3 for the ERC-20 view of the native coin
+func (f Feed) BalanceCall(holder evm.Address) evm.Call3 {
+	if f.Native != nil {
+		return evm.Call3{Target: evm.Multicall3, AllowFailure: true, Data: evm.EthBalanceCall(holder)}
+	}
+	return evm.Call3{Target: f.Token, AllowFailure: true, Data: evm.BalanceOfCall(holder)}
+}
+
+// Balance decodes the answer of a BalanceCall in the token's decimals, false when the call failed
+func (f Feed) Balance(r evm.Result3) (*big.Int, bool) {
+	if !r.Success {
+		return nil, false
+	}
+	v, err := evm.Uint256(r.Data)
+	if err != nil {
+		return nil, false
+	}
+	if f.Native != nil {
+		v = f.Native.ToToken(v, f.Decimals)
+	}
+	return v, true
+}
 
 // Move is one balance change read from a log, From or To is zero for a mint or a burn
 type Move struct {

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -87,6 +88,81 @@ func CallData(t testing.TB, path string) []byte {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// LogsPage turns a recorded eth_getLogs answer into the HyperSync answer of the same query, ending where the request ended
+func LogsPage(t testing.TB, path string) []byte {
+	t.Helper()
+	var resp struct {
+		Result []struct {
+			Address        string   `json:"address"`
+			Topics         []string `json:"topics"`
+			Data           string   `json:"data"`
+			BlockNumber    string   `json:"blockNumber"`
+			LogIndex       string   `json:"logIndex"`
+			TxHash         string   `json:"transactionHash"`
+			BlockTimestamp string   `json:"blockTimestamp"`
+		} `json:"result"`
+	}
+	var req struct {
+		Params []struct {
+			ToBlock string `json:"toBlock"`
+		} `json:"params"`
+	}
+	if err := errors.Join(json.Unmarshal(Read(t, path), &resp), json.Unmarshal(Read(t, strings.TrimSuffix(path, ".json")+".request.json"), &req)); err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Params) != 1 || len(resp.Result) == 0 {
+		t.Fatalf("%s is not one eth_getLogs answer", path)
+	}
+	to, err := strconv.ParseUint(strings.TrimPrefix(req.Params[0].ToBlock, "0x"), 16, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type hsLog struct {
+		BlockNumber string  `json:"block_number"`
+		LogIndex    string  `json:"log_index"`
+		TxHash      string  `json:"transaction_hash"`
+		Address     string  `json:"address"`
+		Data        string  `json:"data"`
+		Topic0      *string `json:"topic0,omitzero"`
+		Topic1      *string `json:"topic1,omitzero"`
+		Topic2      *string `json:"topic2,omitzero"`
+	}
+	type hsBlock struct {
+		Number    string `json:"number"`
+		Timestamp string `json:"timestamp"`
+	}
+	var (
+		logs   []hsLog
+		blocks []hsBlock
+		seen   = map[string]bool{}
+	)
+	for _, l := range resp.Result {
+		out := hsLog{BlockNumber: l.BlockNumber, LogIndex: l.LogIndex, TxHash: l.TxHash, Address: l.Address, Data: l.Data}
+		topics := []**string{&out.Topic0, &out.Topic1, &out.Topic2}
+		for i := range min(len(l.Topics), len(topics)) {
+			*topics[i] = &l.Topics[i]
+		}
+		logs = append(logs, out)
+		if !seen[l.BlockNumber] {
+			seen[l.BlockNumber] = true
+			blocks = append(blocks, hsBlock{Number: l.BlockNumber, Timestamp: l.BlockTimestamp})
+		}
+	}
+	type hsData struct {
+		Logs   []hsLog   `json:"logs"`
+		Blocks []hsBlock `json:"blocks"`
+	}
+	body, err := json.Marshal(struct {
+		Data          []hsData `json:"data"`
+		ArchiveHeight uint64   `json:"archive_height"`
+		NextBlock     uint64   `json:"next_block"`
+	}{Data: []hsData{{Logs: logs, Blocks: blocks}}, ArchiveHeight: to + 1, NextBlock: to + 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
 }
 
 // Header reads a recorded eth_getBlockByNumber answer as number and time

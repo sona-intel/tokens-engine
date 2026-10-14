@@ -1,7 +1,9 @@
 package index
 
 import (
+	"bytes"
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"log/slog"
@@ -18,7 +20,10 @@ import (
 	"tokens/internal/testkit"
 )
 
-const monad = "eip155:143"
+const (
+	monad = "eip155:143"
+	arc   = "eip155:5042"
+)
 
 // fakeLogs answers from recorded pages like the server would: the logs of the asked contracts and topics in
 // [From, To), at most step blocks a page when step is set
@@ -28,12 +33,15 @@ type fakeLogs struct {
 	head  uint64
 	step  uint64
 	calls int
+	// asked is every address a query named
+	asked []evm.Address
 }
 
 func (f *fakeLogs) Page(_ context.Context, _ string, q sources.LogQuery, _ sources.Priority) (sources.Page, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
+	f.asked = append(f.asked, q.Addresses...)
 	end := q.To
 	if f.step > 0 && q.From > 0 {
 		end = min(end, q.From+f.step)
@@ -65,10 +73,60 @@ func (c *failingChain) Aggregate3(_ context.Context, calls []evm.Call3) ([]evm.R
 	return make([]evm.Result3, len(calls)), nil
 }
 
+// recordedNative answers getEthBalance with the recorded Arc answers and fails every other call
+type recordedNative struct {
+	byHolder map[evm.Address]evm.Result3
+	asked    int
+}
+
+func (c *recordedNative) Aggregate3(_ context.Context, calls []evm.Call3) ([]evm.Result3, error) {
+	out := make([]evm.Result3, len(calls))
+	for i, call := range calls {
+		c.asked++
+		if call.Target == evm.Multicall3 && len(call.Data) == 36 && bytes.Equal(call.Data[:4], evm.SelGetEthBalance[:]) {
+			out[i] = c.byHolder[evm.Address(call.Data[16:])]
+		}
+	}
+	return out, nil
+}
+
+// arcNative is the chain of the recorded getEthBalance answers, with the holders it knows and each one's balanceOf
+func arcNative(t *testing.T) (*recordedNative, []evm.Address, []*big.Int) {
+	t.Helper()
+	var req []struct {
+		Params []string `json:"params"`
+	}
+	if err := json.Unmarshal(testkit.Read(t, "rpc/getbalance.arc_usdc.request.json"), &req); err != nil {
+		t.Fatal(err)
+	}
+	native, err1 := evm.DecodeAggregate3(testkit.Result(t, "rpc/ethbalance.arc_usdc.json"), len(req))
+	erc20, err2 := evm.DecodeAggregate3(testkit.Result(t, "rpc/balanceof.arc_usdc.json"), len(req))
+	if err := errors.Join(err1, err2); err != nil {
+		t.Fatal(err)
+	}
+	c := &recordedNative{byHolder: map[evm.Address]evm.Result3{}}
+	holders := make([]evm.Address, len(req))
+	want := make([]*big.Int, len(req))
+	for i, r := range req {
+		holders[i] = evm.MustAddress(r.Params[0])
+		c.byHolder[holders[i]] = native[i]
+		v, err := evm.Uint256(erc20[i].Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want[i] = v
+	}
+	return c, holders, want
+}
+
 func newIndexer(t *testing.T, logs *fakeLogs, chain Chain, cfg config.Index) (*Indexer, *store.Store) {
 	t.Helper()
+	return newChainIndexer(t, config.Chain{ID: monad, Name: "monad", WrappedNative: monWMON}, logs, chain, cfg)
+}
+
+func newChainIndexer(t *testing.T, ch config.Chain, logs *fakeLogs, chain Chain, cfg config.Index) (*Indexer, *store.Store) {
+	t.Helper()
 	db := testkit.NewDB(t)
-	ch := config.Chain{ID: monad, Name: "monad", WrappedNative: monWMON}
 	x := New(ch, cfg, db.Store, logs, chain, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	// the recorded blocks are from 2026-10-13, so the transfer window ends that day
 	x.now = func() time.Time { return time.Date(2026, 10, 13, 18, 0, 0, 0, time.UTC) }
@@ -241,5 +299,129 @@ func TestEnsureCapsTheIndex(t *testing.T) {
 	a[19] = 1
 	if _, err := x.Ensure(ctx, a, 18); err != nil {
 		t.Errorf("a token already indexed: %v", err)
+	}
+}
+
+// USDC's balances on Arc are native balances cut to 6 decimals, which is what the ERC-20 view's balanceOf answers
+func TestArcUSDCBalancesAreNative(t *testing.T) {
+	chain, holders, want := arcNative(t)
+	x := New(arcChain(), indexCfg(), nil, &fakeLogs{}, chain, slog.New(slog.DiscardHandler))
+	got, err := x.balances(t.Context(), FeedOf(arcChain(), arcUSDC, 6), holders)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(holders) {
+		t.Fatalf("%d of %d balances", len(got), len(holders))
+	}
+	for i, h := range holders {
+		if got[h].Cmp(want[i]) != 0 {
+			t.Errorf("%s holds %s, balanceOf says %s", h, got[h], want[i])
+		}
+	}
+	// EURC reads balanceOf of its own contract, which this chain fails
+	if got, err := x.balances(t.Context(), FeedOf(arcChain(), arcEURC, 6), holders); err != nil || len(got) != 0 {
+		t.Errorf("EURC: %d balances, %v", len(got), err)
+	}
+}
+
+// One tail query covers Arc's USDC and EURC and names the system emitter for USDC, never the ERC-20 view
+func TestTailReadsArcUSDCFromTheSystemEmitter(t *testing.T) {
+	p := arcPage(t)
+	logs := &fakeLogs{logs: p.Logs, head: p.NextBlock}
+	x, st := newChainIndexer(t, arcChain(), logs, &failingChain{}, indexCfg())
+	ctx := t.Context()
+	var ready []store.Token
+	for _, token := range []evm.Address{arcUSDC, arcEURC} {
+		tok, err := x.Ensure(ctx, token, 6)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := errors.Join(st.StartBackfill(ctx, tok.ID, store.ModeFull, p.Logs[0].Block, true), st.MarkReady(ctx, tok.ID)); err != nil {
+			t.Fatal(err)
+		}
+		ready = append(ready, tok)
+	}
+	if err := x.tail(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if logs.calls != 1 || !slices.Equal(logs.asked, []evm.Address{arcEmitter, arcEURC}) {
+		t.Fatalf("%d queries for %v", logs.calls, logs.asked)
+	}
+	for _, tok := range ready {
+		f := FeedOf(arcChain(), tok.Token, 6)
+		_, moves := f.Moves(p.Logs, p.Logs[0].Block, p.NextBlock)
+		want := Deltas(moves)
+		have := balancesOf(t, st, tok.ID)
+		n := 0
+		for a, v := range want {
+			if v.Sign() == 0 {
+				continue
+			}
+			n++
+			if have[a] == nil || have[a].Cmp(v) != 0 {
+				t.Fatalf("%s: %s holds %v, want %s", tok.Token, a, have[a], v)
+			}
+		}
+		if len(have) != n {
+			t.Errorf("%s: %d balances, want %d", tok.Token, len(have), n)
+		}
+	}
+	// the kept USDC transfers are the emitter's logs in 6 decimals
+	tr, err := st.TopTransfers(ctx, ready[0].ID, "2026-10-07", 100)
+	if err != nil || len(tr) == 0 {
+		t.Fatalf("%d transfers, %v", len(tr), err)
+	}
+	emitted := map[[2]uint64]*big.Int{}
+	for _, l := range p.Logs {
+		if l.Address == arcEmitter {
+			emitted[[2]uint64{l.Block, l.LogIndex}] = new(big.Int).SetBytes(l.Data)
+		}
+	}
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(12), nil)
+	for _, x := range tr {
+		raw, ok := emitted[[2]uint64{x.Block, x.LogIndex}]
+		if !ok || new(big.Int).Quo(raw, scale).Cmp(x.Amount) != 0 {
+			t.Fatalf("transfer %d/%d of %s is no emitter log in 6 decimals", x.Block, x.LogIndex, x.Amount)
+		}
+	}
+}
+
+// A busy Arc USDC follows recent activity, and every address it touches gets its native balance through getEthBalance
+func TestArcUSDCActivityReadsNativeBalances(t *testing.T) {
+	p := arcPage(t)
+	logs := &fakeLogs{logs: p.Logs, head: p.NextBlock, step: 5}
+	chain, holders, want := arcNative(t)
+	cfg := indexCfg()
+	cfg.BackfillBudget, cfg.ActivityWindowBlocks = 2, 20
+	x, st := newChainIndexer(t, arcChain(), logs, chain, cfg)
+	ctx := t.Context()
+	tok, err := x.Ensure(ctx, arcUSDC, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := x.backfill(ctx, tok); err != nil {
+		t.Fatal(err)
+	}
+	got, _, _ := x.Lookup(ctx, arcUSDC)
+	if got.State != store.StateReady || got.Mode != store.ModeActivity || got.StartBlock != p.NextBlock-20 || chain.asked == 0 {
+		t.Fatalf("token %+v after %d balance reads", got, chain.asked)
+	}
+	if slices.Contains(logs.asked, arcUSDC) {
+		t.Error("the backfill asked HyperSync for the ERC-20 view of USDC")
+	}
+	// the chain answers only the recorded holders, so they are the rows
+	have := balancesOf(t, st, got.ID)
+	n := 0
+	for i, h := range holders {
+		if want[i].Sign() == 0 {
+			continue
+		}
+		n++
+		if have[h] == nil || have[h].Cmp(want[i]) != 0 {
+			t.Errorf("%s holds %v, its native balance cut to 6 decimals is %s", h, have[h], want[i])
+		}
+	}
+	if len(have) != n || got.Holders != int64(n) {
+		t.Errorf("%d balances and %d holders, want %d", len(have), got.Holders, n)
 	}
 }

@@ -2,6 +2,7 @@ package evm_test
 
 import (
 	"bytes"
+	"encoding/json/v2"
 	"errors"
 	"math/big"
 	"strings"
@@ -27,6 +28,8 @@ func TestEncodeAggregate3MatchesRecordedCalldata(t *testing.T) {
 		"eth_usdc":   "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"eth_mkr":    "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2",
 		"monad_usdc": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+		"arc_usdc":   "0x3600000000000000000000000000000000000000",
+		"arc_eurc":   "0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1",
 	} {
 		got := evm.EncodeAggregate3(calls(evm.MustAddress(token)))
 		want := testkit.CallData(t, "rpc/meta."+name+".request.json")
@@ -44,6 +47,77 @@ func TestEncodeAggregate3MatchesRecordedCalldata(t *testing.T) {
 	if got, want := evm.EncodeAggregate3(bal), testkit.CallData(t, "rpc/balanceof.monad_usdc.request.json"); !bytes.Equal(got, want) {
 		t.Errorf("balanceOf calldata differs\n got %x\nwant %x", got, want)
 	}
+	var native []evm.Call3
+	for _, h := range arcHolders(t) {
+		native = append(native, evm.Call3{Target: evm.Multicall3, AllowFailure: true, Data: evm.EthBalanceCall(h.addr)})
+	}
+	if got, want := evm.EncodeAggregate3(native), testkit.CallData(t, "rpc/ethbalance.arc_usdc.request.json"); !bytes.Equal(got, want) {
+		t.Errorf("getEthBalance calldata differs\n got %x\nwant %x", got, want)
+	}
+}
+
+type arcHolder struct {
+	addr    evm.Address
+	balance *big.Int
+}
+
+// arcHolders are the holders of the recorded eth_getBalance batch on Arc, with the native balance each one answered
+func arcHolders(t *testing.T) []arcHolder {
+	t.Helper()
+	var (
+		req []struct {
+			ID     int      `json:"id"`
+			Params []string `json:"params"`
+		}
+		resp []struct {
+			ID     int    `json:"id"`
+			Result string `json:"result"`
+		}
+	)
+	if err := errors.Join(json.Unmarshal(testkit.Read(t, "rpc/getbalance.arc_usdc.request.json"), &req), json.Unmarshal(testkit.Read(t, "rpc/getbalance.arc_usdc.json"), &resp)); err != nil {
+		t.Fatal(err)
+	}
+	out := make([]arcHolder, len(req))
+	for _, r := range resp {
+		v, ok := new(big.Int).SetString(strings.TrimPrefix(r.Result, "0x"), 16)
+		if !ok || r.ID < 0 || r.ID >= len(req) {
+			t.Fatalf("answer %d is malformed", r.ID)
+		}
+		out[r.ID] = arcHolder{addr: evm.MustAddress(req[r.ID].Params[0]), balance: v}
+	}
+	return out
+}
+
+// Arc keeps one USDC balance at 18 decimals, getEthBalance answers it as eth_getBalance does and balanceOf cuts its last 12 digits
+func TestDecodeRecordedNativeBalances(t *testing.T) {
+	holders := arcHolders(t)
+	native, err1 := evm.DecodeAggregate3(testkit.Result(t, "rpc/ethbalance.arc_usdc.json"), len(holders))
+	erc20, err2 := evm.DecodeAggregate3(testkit.Result(t, "rpc/balanceof.arc_usdc.json"), len(holders))
+	if err := errors.Join(err1, err2); err != nil {
+		t.Fatal(err)
+	}
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(12), nil)
+	cut := 0
+	for i, h := range holders {
+		n, err1 := evm.Uint256(native[i].Data)
+		b, err2 := evm.Uint256(erc20[i].Data)
+		if err := errors.Join(err1, err2); err != nil || !native[i].Success || !erc20[i].Success {
+			t.Fatalf("%s: %v", h.addr, err)
+		}
+		if n.Cmp(h.balance) != 0 {
+			t.Errorf("%s: getEthBalance %s, eth_getBalance %s", h.addr, n, h.balance)
+		}
+		q, r := new(big.Int).QuoRem(n, scale, new(big.Int))
+		if q.Cmp(b) != 0 {
+			t.Errorf("%s: balanceOf %s, native %s", h.addr, b, n)
+		}
+		if r.Sign() != 0 {
+			cut++
+		}
+	}
+	if cut == 0 {
+		t.Error("no recorded balance has digits below 6 decimals, so the cut is untested")
+	}
 }
 
 func TestDecodeRecordedMetadata(t *testing.T) {
@@ -55,6 +129,8 @@ func TestDecodeRecordedMetadata(t *testing.T) {
 		{"eth_mkr", "Maker", "MKR", 18},
 		{"monad_usdc", "USDC", "USDC", 6},
 		{"monad_wmon", "Wrapped MON", "WMON", 18},
+		{"arc_usdc", "USDC", "USDC", 6},
+		{"arc_eurc", "EURC", "EURC", 6},
 	}
 	for _, c := range cases {
 		res, err := evm.DecodeAggregate3(testkit.Result(t, "rpc/meta."+c.file+".json"), 4)
@@ -201,5 +277,8 @@ func TestAddressesAndTopics(t *testing.T) {
 	call := evm.BalanceOfCall(a)
 	if len(call) != 36 || !bytes.Equal(call[16:], a[:]) || new(big.Int).SetBytes(call[4:16]).Sign() != 0 {
 		t.Errorf("balanceOf calldata %x", call)
+	}
+	if call := evm.EthBalanceCall(a); len(call) != 36 || !bytes.Equal(call[:4], evm.SelGetEthBalance[:]) || !bytes.Equal(call[16:], a[:]) {
+		t.Errorf("getEthBalance calldata %x", call)
 	}
 }

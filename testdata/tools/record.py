@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Records the real answers the tests read. Run from the repository root:
 
-    python3 -I testdata/tools/record.py rpc|blockscout|gecko|prices|hypersync|lists|search
+    python3 -I testdata/tools/record.py rpc|blockscout|gecko|prices|hypersync|lists|search|holdermap|arc
 
 rpc needs the RPC router on 127.0.0.1:4000, prices the prices service on 127.0.0.1:8210,
 hypersync the key in ENVIO_HYPERSYNC_KEY (it is sent, never written). Every file holds the
@@ -233,6 +233,68 @@ def record_holdermap():
         save(f"rpc/header.ethereum_{b}.json", rpc("ethereum", "eth_getBlockByNumber", [hex(b), False]))
 
 
+# Circle's public endpoint, Sona's router had no Arc network when these were recorded
+ARC_RPC = "https://rpc.mainnet.arc.io"
+ARC_USDC = "0x3600000000000000000000000000000000000000"
+# logs a Transfer at 18 decimals for every move of native USDC, the ERC-20 view logs a second one only for ERC-20 calls
+ARC_EMITTER = "0xfffffffffffffffffffffffffffffffffffffffe"
+ARC_EURC = "0xbef5f6d51cb62b58e6a8f77868681825c6fe21c1"
+ARC_FROM, ARC_TO = 25941000, 25941019
+
+
+def arc_rpc(method, params, request=None):
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    if request:
+        save(request, body)
+    status, raw, _ = fetch(ARC_RPC, body, {"Content-Type": "application/json"})
+    assert status == 200 and b'"error"' not in raw, (status, raw[:200])
+    return raw
+
+
+def arc_holders(logs):
+    """the holders the index has after the recorded logs: the system emitter's moves cut to 6 decimals, positive
+    balances only, largest first and ties by address"""
+    deltas = {}
+    for log in logs:
+        if log["address"].lower() != ARC_EMITTER or len(log["topics"]) < 3:
+            continue
+        amount = int(log["data"], 16) // 10**12
+        for topic, sign in ((log["topics"][1], -1), (log["topics"][2], 1)):
+            who = "0x" + topic[-40:].lower()
+            if amount and who != "0x" + "0" * 40:
+                deltas[who] = deltas.get(who, 0) + sign * amount
+    return [h for h, v in sorted(deltas.items(), key=lambda kv: (-kv[1], kv[0])) if v > 0]
+
+
+def record_arc():
+    for token, name in ((ARC_USDC, "arc_usdc"), (ARC_EURC, "arc_eurc")):
+        calls = [(token, True, SEL[k]) for k in ("name", "symbol", "decimals", "totalSupply")]
+        save(f"rpc/meta.{name}.json", arc_rpc("eth_call", [{"to": "0x" + MULTICALL3, "data": aggregate3(calls)}, "latest"], f"rpc/meta.{name}.request.json"))
+    raw = arc_rpc("eth_getLogs", [{"fromBlock": hex(ARC_FROM), "toBlock": hex(ARC_TO), "address": [ARC_EMITTER, ARC_USDC, ARC_EURC], "topics": [[TRANSFER]]}],
+                  "rpc/logs.arc_usdc.request.json")
+    save("rpc/logs.arc_usdc.json", raw)
+    holders = arc_holders(json.loads(raw)["result"])
+    print(" holders", len(holders))
+    at = hex(ARC_TO)
+    native = [("0x" + MULTICALL3, True, "4d2301cc" + word(int(h, 16))) for h in holders]
+    save("rpc/ethbalance.arc_usdc.json", arc_rpc("eth_call", [{"to": "0x" + MULTICALL3, "data": aggregate3(native)}, at], "rpc/ethbalance.arc_usdc.request.json"))
+    erc20 = [(ARC_USDC, True, "70a08231" + word(int(h, 16))) for h in holders]
+    save("rpc/balanceof.arc_usdc.json", arc_rpc("eth_call", [{"to": "0x" + MULTICALL3, "data": aggregate3(erc20)}, at], "rpc/balanceof.arc_usdc.request.json"))
+    batch = json.dumps([{"jsonrpc": "2.0", "id": i, "method": "eth_getBalance", "params": [h, at]} for i, h in enumerate(holders)]).encode()
+    save("rpc/getbalance.arc_usdc.request.json", batch)
+    status, raw, _ = fetch(ARC_RPC, batch, {"Content-Type": "application/json"})
+    assert status == 200 and b'"error"' not in raw, status
+    save("rpc/getbalance.arc_usdc.json", raw)
+    for n in (ARC_FROM, ARC_TO):
+        save(f"rpc/header.arc_{n}.json", arc_rpc("eth_getBlockByNumber", [hex(n), False]))
+    base = "https://api.geckoterminal.com/api/v2/networks/arc/tokens/"
+    for name, path in (("info.arc_usdc", ARC_USDC + "/info"), ("token.arc_usdc", ARC_USDC)):
+        status, raw, _ = fetch(base + path, headers={"Accept": "application/json"})
+        assert status == 200, status
+        save(f"gecko/{name}.json", raw)
+        time.sleep(2.5)
+
+
 if __name__ == "__main__":
     {"rpc": record_rpc, "blockscout": record_blockscout, "gecko": record_gecko, "prices": record_prices, "hypersync": record_hypersync, "lists": record_lists, "search": record_search,
-     "holdermap": record_holdermap}[sys.argv[1]]()
+     "holdermap": record_holdermap, "arc": record_arc}[sys.argv[1]]()

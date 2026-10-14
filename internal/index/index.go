@@ -231,7 +231,7 @@ func (x *Indexer) backfill(ctx context.Context, t store.Token) error {
 	if t.StartedAt != nil {
 		started = *t.StartedAt
 	}
-	wrapped := t.Token == x.chain.WrappedNative
+	f := x.feed(t)
 	requests := t.Requests
 	// span is the blocks the latest full page covered, over counts the pages in a row whose span projects past the budget
 	var (
@@ -266,7 +266,7 @@ func (x *Indexer) backfill(ctx context.Context, t store.Token) error {
 			mode, next, span, over = store.ModeActivity, start, 0, 0
 			continue
 		}
-		page, err := x.logs.Page(ctx, x.chain.ID, sources.LogQuery{From: next, To: head, Addresses: []evm.Address{t.Token}, Topics0: Topics(wrapped), Blocks: true}, sources.Background)
+		page, err := x.logs.Page(ctx, x.chain.ID, sources.LogQuery{From: next, To: head, Addresses: []evm.Address{f.Source}, Topics0: Topics(f.Wrapped), Blocks: true}, sources.Background)
 		if err != nil {
 			return err
 		}
@@ -275,7 +275,7 @@ func (x *Indexer) backfill(ctx context.Context, t store.Token) error {
 		if end == next {
 			return errors.New("hypersync made no progress")
 		}
-		if err := x.apply(ctx, t, mode, wrapped, page.Logs, next, end, 1); err != nil {
+		if err := x.apply(ctx, t, mode, f, page.Logs, next, end, 1); err != nil {
 			return err
 		}
 		if end < head && len(page.Logs) > 0 {
@@ -299,9 +299,12 @@ func project(spent int, next, head, span uint64) int {
 	return spent + int(min(left, 1<<30))
 }
 
+// feed is where the index reads the moves of a token of this chain
+func (x *Indexer) feed(t store.Token) Feed { return FeedOf(x.chain, t.Token, t.Decimals) }
+
 // apply turns the logs of [from, end) into one batch for one token and commits it
-func (x *Indexer) apply(ctx context.Context, t store.Token, mode string, wrapped bool, logs []sources.Log, from, end uint64, requests int) error {
-	kept, moves := decodeAll(logs, t.Token, wrapped, from, end)
+func (x *Indexer) apply(ctx context.Context, t store.Token, mode string, f Feed, logs []sources.Log, from, end uint64, requests int) error {
+	kept, moves := f.Moves(logs, from, end)
 	b := store.Batch{
 		TokenID: t.ID, NextBlock: end, FromBlock: from, Requests: requests,
 		CutoffDay: CutoffDay(x.now(), x.cfg.WindowDays), TopPerDay: x.cfg.TopPerDay,
@@ -310,7 +313,7 @@ func (x *Indexer) apply(ctx context.Context, t store.Token, mode string, wrapped
 	if mode == store.ModeFull {
 		b.Deltas = Deltas(moves)
 	} else {
-		balances, err := x.balances(ctx, t.Token, Touched(moves))
+		balances, err := x.balances(ctx, f, Touched(moves))
 		if err != nil {
 			return err
 		}
@@ -319,46 +322,24 @@ func (x *Indexer) apply(ctx context.Context, t store.Token, mode string, wrapped
 	return x.st.Commit(ctx, b)
 }
 
-// decodeAll keeps the logs of token in [from, end) that decode, with their moves in the same order
-func decodeAll(logs []sources.Log, token evm.Address, wrapped bool, from, end uint64) ([]sources.Log, []Move) {
-	var (
-		kept  []sources.Log
-		moves []Move
-	)
-	for _, l := range logs {
-		if l.Address != token || l.Block < from || l.Block >= end {
-			continue
-		}
-		if m, ok := Decode(l, wrapped); ok {
-			kept, moves = append(kept, l), append(moves, m)
-		}
-	}
-	return kept, moves
-}
-
-// balances reads balanceOf of every holder at the latest block, a holder whose call fails is left out
-func (x *Indexer) balances(ctx context.Context, token evm.Address, holders []evm.Address) (map[evm.Address]*big.Int, error) {
+// balances reads the balance of every holder at the latest block, a holder whose call fails is left out
+func (x *Indexer) balances(ctx context.Context, f Feed, holders []evm.Address) (map[evm.Address]*big.Int, error) {
 	out := make(map[evm.Address]*big.Int, len(holders))
 	if len(holders) == 0 {
 		return out, nil
 	}
 	calls := make([]evm.Call3, len(holders))
 	for i, h := range holders {
-		calls[i] = evm.Call3{Target: token, AllowFailure: true, Data: evm.BalanceOfCall(h)}
+		calls[i] = f.BalanceCall(h)
 	}
 	res, err := x.rpc.Aggregate3(ctx, calls)
 	if err != nil {
 		return nil, fmt.Errorf("balanceOf: %w", err)
 	}
 	for i, r := range res {
-		if !r.Success {
-			continue
+		if v, ok := f.Balance(r); ok {
+			out[holders[i]] = v
 		}
-		v, err := evm.Uint256(r.Data)
-		if err != nil {
-			continue
-		}
-		out[holders[i]] = v
 	}
 	return out, nil
 }
@@ -413,8 +394,9 @@ func (x *Indexer) tail(ctx context.Context) error {
 		addrs := make([]evm.Address, len(tokens))
 		anyWrapped := false
 		for i, t := range tokens {
-			addrs[i] = t.Token
-			anyWrapped = anyWrapped || t.Token == x.chain.WrappedNative
+			f := x.feed(t)
+			addrs[i] = f.Source
+			anyWrapped = anyWrapped || f.Wrapped
 		}
 		page, err := x.logs.Page(ctx, x.chain.ID, sources.LogQuery{From: from, To: head, Addresses: addrs, Topics0: Topics(anyWrapped), Blocks: true}, sources.Background)
 		if err != nil {
@@ -425,7 +407,7 @@ func (x *Indexer) tail(ctx context.Context) error {
 			if t.NextBlock >= end {
 				continue
 			}
-			err := x.apply(ctx, t, t.Mode, t.Token == x.chain.WrappedNative, page.Logs, t.NextBlock, end, 0)
+			err := x.apply(ctx, t, t.Mode, x.feed(t), page.Logs, t.NextBlock, end, 0)
 			if errors.Is(err, store.ErrMoved) {
 				continue
 			}
