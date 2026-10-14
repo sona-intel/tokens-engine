@@ -11,6 +11,10 @@ type MarketChain struct {
 	ID        string
 	LlamaName string
 	Activity  bool
+	// StatsURL is the Blockscout instance whose stats service holds the chain's activity lines, empty for blockscout_url
+	StatsURL string
+	// FeesMetric names the fee series: fees_eth, or fees_usdc where USDC is the gas coin
+	FeesMetric string
 }
 
 // Markets is the config of the chain and market routes: top coins, DeFi figures and chain activity
@@ -40,9 +44,11 @@ func (m Markets) Chain(id string) (MarketChain, bool) {
 }
 
 type marketChainFile struct {
-	ID        string `yaml:"id"`
-	LlamaName string `yaml:"llama_name"`
-	Activity  bool   `yaml:"activity"`
+	ID         string `yaml:"id"`
+	LlamaName  string `yaml:"llama_name"`
+	Activity   bool   `yaml:"activity"`
+	StatsURL   string `yaml:"stats_url"`
+	FeesMetric string `yaml:"fees_metric"`
 }
 
 type marketsFile struct {
@@ -65,7 +71,11 @@ func (m marketsFile) build() Markets {
 		LlamaPerMinute: m.LlamaPerMinute, DefiRefresh: m.DefiRefresh, ActivityRefresh: m.ActivityRefresh,
 	}
 	for _, c := range m.Chains {
-		out.Chains = append(out.Chains, MarketChain(c))
+		mc := MarketChain{ID: c.ID, LlamaName: c.LlamaName, Activity: c.Activity, StatsURL: trimSlash(c.StatsURL), FeesMetric: c.FeesMetric}
+		if mc.FeesMetric == "" {
+			mc.FeesMetric = "fees_eth"
+		}
+		out.Chains = append(out.Chains, mc)
 	}
 	return out
 }
@@ -107,6 +117,10 @@ func (m marketsFile) validate(served []chainFile) error {
 			return fmt.Errorf("markets.chains lists %q twice", c.ID)
 		case c.LlamaName == "" || len(c.LlamaName) > 64:
 			return fmt.Errorf("markets.chains llama_name of %s must be a DefiLlama chain name", c.ID)
+		case c.StatsURL != "" && (!c.Activity || !validURL(c.StatsURL, "https")):
+			return fmt.Errorf("markets.chains stats_url of %s must be an https URL without credentials and needs activity: true", c.ID)
+		case c.FeesMetric != "" && c.FeesMetric != "fees_eth" && c.FeesMetric != "fees_usdc":
+			return fmt.Errorf("markets.chains fees_metric of %s must be fees_eth or fees_usdc", c.ID)
 		}
 		seen[c.ID], seen[c.LlamaName] = true, true
 	}

@@ -108,11 +108,16 @@ markets:
     - id: "eip155:1"
       llama_name: Ethereum
       activity: true
+      # activity reads stats_url's /stats-service, blockscout_url when it is unset; fees_metric is fees_eth unless set
     - id: "eip155:143"
       llama_name: Monad
     # DefiLlama's chain names are case-sensitive
+    # Arc's explorer has its own Blockscout stats service, keyless like Ethereum's. USDC is Arc's gas coin, so its fee line is fees_usdc
     - id: "eip155:5042"
       llama_name: Arc
+      activity: true
+      stats_url: https://explorer.arc.io
+      fees_metric: fees_usdc
 # Holder map: bubbles for the largest holders, and on Ethereum links between holders that sent each other the token.
 # Links come from HyperSync in a background job on the visitors' share of the quota (hypersync_interactive_per_minute),
 # at a lower priority than visitors and at most 1 request a minute, so a map of 8 requests takes about 8 minutes.

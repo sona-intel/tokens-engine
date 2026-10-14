@@ -23,7 +23,7 @@ func TestMarketsConfig(t *testing.T) {
 	if c, ok := m.Chain("eip155:1"); !ok || c.LlamaName != "Ethereum" || !c.Activity {
 		t.Errorf("ethereum %+v", c)
 	}
-	if c, ok := m.Chain("eip155:5042"); !ok || c.LlamaName != "Arc" || c.Activity {
+	if c, ok := m.Chain("eip155:5042"); !ok || c.LlamaName != "Arc" || !c.Activity || c.StatsURL != "https://explorer.arc.io" || c.FeesMetric != "fees_usdc" {
 		t.Errorf("arc %+v", c)
 	}
 	if m.CoinGeckoKey.Reveal() != "cg-demo" || fmt.Sprint(m.CoinGeckoKey) != redacted || strings.Contains(fmt.Sprintf("%#v", cfg), "cg-demo") {

@@ -86,12 +86,13 @@ type chainSlots struct {
 
 // Deps are the sources and the clock of the service
 type Deps struct {
-	Config     config.Markets
-	CoinGecko  *sources.CoinGecko
-	Llama      *sources.Llama
-	Blockscout *sources.Blockscout
-	Now        func() time.Time
-	Logger     *slog.Logger
+	Config    config.Markets
+	CoinGecko *sources.CoinGecko
+	Llama     *sources.Llama
+	// Stats is the Blockscout stats service of each chain with activity, by chain id
+	Stats  map[string]*sources.Blockscout
+	Now    func() time.Time
+	Logger *slog.Logger
 }
 
 // Service keeps the market data in memory and refreshes it in the background

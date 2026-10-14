@@ -50,27 +50,33 @@ func MarketsConfig() config.Markets {
 	return config.Markets{
 		CoinGeckoGap: time.Millisecond, TopCoinsRefresh: 5 * time.Minute, PlatformsRefresh: 24 * time.Hour,
 		LlamaPerMinute: 60000, DefiRefresh: time.Hour, ActivityRefresh: time.Hour,
-		Chains: []config.MarketChain{{ID: Ethereum, LlamaName: "Ethereum", Activity: true}, {ID: Monad, LlamaName: "Monad"}},
+		Chains: []config.MarketChain{{ID: Ethereum, LlamaName: "Ethereum", Activity: true, FeesMetric: "fees_eth"}, {ID: Monad, LlamaName: "Monad"}},
 	}
 }
 
 var marketRoutes = map[string]string{
-	"/cg/coins/markets":                              "coingecko/markets.json",
-	"/cg/coins/list":                                 "coingecko/coins_list.json",
-	"/llama/v2/historicalChainTvl/Monad":             "llama/tvl.monad.json",
-	"/llama/v2/historicalChainTvl/Ethereum":          "llama/tvl.ethereum.json",
-	"/llama/protocols":                               "llama/protocols.json",
-	"/llama/overview/dexs/Monad":                     "llama/dex.monad.json",
-	"/llama/overview/dexs/Ethereum":                  "llama/dex.ethereum.json",
-	"/stable/stablecoins":                            "llama/stablecoins.json",
-	"/stable/stablecoincharts/Monad":                 "llama/stablecharts.monad.json",
-	"/stable/stablecoincharts/Ethereum":              "llama/stablecharts.ethereum.json",
-	"/stats-service/api/v1/lines/newTxns":            "blockscout/stats.newTxns.json",
-	"/stats-service/api/v1/lines/activeAccounts":     "blockscout/stats.activeAccounts.json",
-	"/stats-service/api/v1/lines/newAccounts":        "blockscout/stats.newAccounts.json",
-	"/stats-service/api/v1/lines/averageGasPrice":    "blockscout/stats.averageGasPrice.json",
-	"/stats-service/api/v1/lines/txnsFee":            "blockscout/stats.txnsFee.json",
-	"/stats-service/api/v1/lines/networkUtilization": "blockscout/stats.networkUtilization.json",
+	"/cg/coins/markets":                                  "coingecko/markets.json",
+	"/cg/coins/list":                                     "coingecko/coins_list.json",
+	"/llama/v2/historicalChainTvl/Monad":                 "llama/tvl.monad.json",
+	"/llama/v2/historicalChainTvl/Ethereum":              "llama/tvl.ethereum.json",
+	"/llama/protocols":                                   "llama/protocols.json",
+	"/llama/overview/dexs/Monad":                         "llama/dex.monad.json",
+	"/llama/overview/dexs/Ethereum":                      "llama/dex.ethereum.json",
+	"/stable/stablecoins":                                "llama/stablecoins.json",
+	"/stable/stablecoincharts/Monad":                     "llama/stablecharts.monad.json",
+	"/stable/stablecoincharts/Ethereum":                  "llama/stablecharts.ethereum.json",
+	"/stats-service/api/v1/lines/newTxns":                "blockscout/stats.newTxns.json",
+	"/stats-service/api/v1/lines/activeAccounts":         "blockscout/stats.activeAccounts.json",
+	"/stats-service/api/v1/lines/newAccounts":            "blockscout/stats.newAccounts.json",
+	"/stats-service/api/v1/lines/averageGasPrice":        "blockscout/stats.averageGasPrice.json",
+	"/stats-service/api/v1/lines/txnsFee":                "blockscout/stats.txnsFee.json",
+	"/stats-service/api/v1/lines/networkUtilization":     "blockscout/stats.networkUtilization.json",
+	"/arc/stats-service/api/v1/lines/newTxns":            "blockscout/stats.arc.newTxns.json",
+	"/arc/stats-service/api/v1/lines/activeAccounts":     "blockscout/stats.arc.activeAccounts.json",
+	"/arc/stats-service/api/v1/lines/newAccounts":        "blockscout/stats.arc.newAccounts.json",
+	"/arc/stats-service/api/v1/lines/averageGasPrice":    "blockscout/stats.arc.averageGasPrice.json",
+	"/arc/stats-service/api/v1/lines/txnsFee":            "blockscout/stats.arc.txnsFee.json",
+	"/arc/stats-service/api/v1/lines/networkUtilization": "blockscout/stats.arc.networkUtilization.json",
 }
 
 // NewMarkets builds a market service whose sources answer from the recordings, with nothing loaded yet
@@ -81,6 +87,17 @@ func NewMarkets(t testing.TB) (*markets.Service, *MarketFakes) {
 
 // NewMarketsWithKey is NewMarkets with a CoinGecko demo key, which every CoinGecko request must carry
 func NewMarketsWithKey(t testing.TB, key string) (*markets.Service, *MarketFakes) {
+	t.Helper()
+	return newMarkets(t, key, false)
+}
+
+// NewMarketsWithArc is NewMarkets with Arc added as a chain that has activity only: refresh its activity alone, no DeFi recording covers Arc
+func NewMarketsWithArc(t testing.TB) (*markets.Service, *MarketFakes) {
+	t.Helper()
+	return newMarkets(t, "", true)
+}
+
+func newMarkets(t testing.TB, key string, arc bool) (*markets.Service, *MarketFakes) {
 	t.Helper()
 	f := &MarketFakes{now: Now, Requests: map[string]int{}, CoinKey: key}
 	files := map[string][]byte{}
@@ -110,12 +127,18 @@ func NewMarketsWithKey(t testing.TB, key string) (*markets.Service, *MarketFakes
 	}))
 	t.Cleanup(srv.Close)
 	cfg := MarketsConfig()
+	if arc {
+		cfg.Chains = append(cfg.Chains, config.MarketChain{ID: Arc, LlamaName: "Arc", Activity: true, StatsURL: "https://explorer.arc.io", FeesMetric: "fees_usdc"})
+	}
 	s := markets.New(markets.Deps{
-		Config:     cfg,
-		CoinGecko:  sources.NewCoinGecko(srv.URL+"/cg", f.CoinKey, cfg.CoinGeckoGap).WithHTTPClient(srv.Client()),
-		Llama:      sources.NewLlama(srv.URL+"/llama", srv.URL+"/stable", cfg.LlamaPerMinute).WithHTTPClient(srv.Client()),
-		Blockscout: sources.NewBlockscout(srv.URL, 1000).WithHTTPClient(srv.Client()),
-		Now:        f.clock,
+		Config:    cfg,
+		CoinGecko: sources.NewCoinGecko(srv.URL+"/cg", f.CoinKey, cfg.CoinGeckoGap).WithHTTPClient(srv.Client()),
+		Llama:     sources.NewLlama(srv.URL+"/llama", srv.URL+"/stable", cfg.LlamaPerMinute).WithHTTPClient(srv.Client()),
+		Stats: map[string]*sources.Blockscout{
+			Ethereum: sources.NewBlockscout(srv.URL, 1000).WithHTTPClient(srv.Client()),
+			Arc:      sources.NewBlockscout(srv.URL+"/arc", 1000).WithHTTPClient(srv.Client()),
+		},
+		Now: f.clock,
 	})
 	return s, f
 }

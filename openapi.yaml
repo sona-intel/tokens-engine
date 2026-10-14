@@ -69,7 +69,7 @@ info:
     | `GET /internal/v1/chains/{chain}/defi/protocols` | DefiLlama `/protocols` | 1 hour |
     | `GET /internal/v1/chains/{chain}/defi/stablecoins` | DefiLlama stablecoins `/stablecoins` and `/stablecoincharts/{chain}` | 1 hour |
     | `GET /internal/v1/chains/{chain}/defi/dexs` | DefiLlama `/overview/dexs/{chain}` | 1 hour |
-    | `GET /internal/v1/chains/{chain}/activity` (Ethereum only) | Blockscout stats service `/stats-service/api/v1/lines/{id}` | 1 hour |
+    | `GET /internal/v1/chains/{chain}/activity` (Ethereum and Arc) | Blockscout stats service `/stats-service/api/v1/lines/{id}` of eth.blockscout.com and explorer.arc.io | 1 hour |
 
     The chain routes take `{chain}` as in the token routes. `RULES.md` says how each number is made and where it falls short.
 
@@ -511,7 +511,7 @@ paths:
       tags: [Markets]
       summary: Get the daily on-chain activity of a chain
       description: |
-        Call this for six daily series of a chain: transactions, active accounts, new accounts, the average gas price in gwei, the transaction fees in ETH and the block utilization in percent. `days` is 30, 90 or 365, default 90. Only Ethereum (`eip155:1`) has them, from Blockscout's stats service; Monad and Arc answer 404 `unsupported_chain` because no source is wired for them. The last item is the current UTC day. Read every hour.
+        Call this for six daily series of a chain: transactions, active accounts, new accounts, the average gas price in gwei, the transaction fees in the chain's gas coin and the block utilization in percent. `days` is 30, 90 or 365, default 90. Ethereum (`eip155:1`) and Arc (`eip155:5042`) have them, from the Blockscout stats service of each explorer; the fee series is `fees_eth` (ETH) on Ethereum and `fees_usdc` (USDC) on Arc. Monad answers 404 `unsupported_chain` because no source is wired for it. The last item is the current UTC day. Read every hour.
       parameters:
         - {$ref: '#/components/parameters/SeriesDays'}
       responses:
@@ -526,6 +526,9 @@ paths:
                 real:
                   summary: A real answer
                   value: {"kind": "chain_activity", "chain": "eip155:1", "series": [{"metric": "txs", "items": [{"day": "2026-10-12", "value": 1881461}, {"day": "2026-10-13", "value": 1498844}]}, {"metric": "active_accounts", "items": [{"day": "2026-10-12", "value": 518135}, {"day": "2026-10-13", "value": 86173}]}, {"metric": "new_accounts", "items": [{"day": "2026-10-12", "value": 136413}, {"day": "2026-10-13", "value": 15865}]}, {"metric": "gas_price_gwei", "items": [{"day": "2026-10-12", "value": 0.8657337450604846}, {"day": "2026-10-13", "value": 0.8802943839968326}]}, {"metric": "fees_eth", "items": [{"day": "2026-10-12", "value": 156.15386569207703}, {"day": "2026-10-13", "value": 39.541274068388226}]}, {"metric": "utilization_pct", "items": [{"day": "2026-10-12", "value": 50.5289}, {"day": "2026-10-13", "value": 50.5257}]}], "coverage": ["chain_series_last_day_partial"]}
+                arc:
+                  summary: A real answer on Arc, whose fees are in USDC
+                  value: {"kind": "chain_activity", "chain": "eip155:5042", "series": [{"metric": "txs", "items": [{"day": "2026-10-12", "value": 979352}, {"day": "2026-10-13", "value": 1276854}]}, {"metric": "active_accounts", "items": [{"day": "2026-10-12", "value": 24896}, {"day": "2026-10-13", "value": 21685}]}, {"metric": "new_accounts", "items": [{"day": "2026-10-12", "value": 6669}, {"day": "2026-10-13", "value": 3766}]}, {"metric": "gas_price_gwei", "items": [{"day": "2026-10-12", "value": 29.823366164973933}, {"day": "2026-10-13", "value": 23.591709585468244}]}, {"metric": "fees_usdc", "items": [{"day": "2026-10-12", "value": 3895.84321728715}, {"day": "2026-10-13", "value": 3600.554929274452}]}, {"metric": "utilization_pct", "items": [{"day": "2026-10-12", "value": 2.2839}, {"day": "2026-10-13", "value": 2.869}]}], "coverage": ["chain_series_last_day_partial"]}
         "400": {$ref: '#/components/responses/InvalidRequest'}
         "404": {$ref: '#/components/responses/NotFound'}
         "499": {$ref: '#/components/responses/ClientClosed'}
@@ -1220,13 +1223,13 @@ components:
         chain: {$ref: '#/components/schemas/Chain'}
         series:
           type: array
-          description: Six series in a fixed order. `txs` is transactions a day, `active_accounts` and `new_accounts` are accounts, `gas_price_gwei` the average gas price in gwei, `fees_eth` the fees paid in ETH and `utilization_pct` the average share of the gas limit used, from 0 to 100.
+          description: Six series in a fixed order. `txs` is transactions a day, `active_accounts` and `new_accounts` are accounts, `gas_price_gwei` the average gas price in gwei, `fees_eth` the fees paid in the chain's gas coin (`fees_eth` on Ethereum, `fees_usdc` on Arc) and `utilization_pct` the average share of the gas limit used, from 0 to 100.
           items:
             type: object
             additionalProperties: false
             required: [metric, items]
             properties:
-              metric: {type: string, enum: [txs, active_accounts, new_accounts, gas_price_gwei, fees_eth, utilization_pct]}
+              metric: {type: string, enum: [txs, active_accounts, new_accounts, gas_price_gwei, fees_eth, fees_usdc, utilization_pct]}
               items:
                 type: array
                 description: Oldest first.

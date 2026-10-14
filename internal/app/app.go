@@ -81,6 +81,17 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 		idx[ic.ID] = x
 	}
 	blockscout := sources.NewBlockscout(cfg.BlockscoutURL, cfg.BlockscoutPerSecond)
+	// every stats host gets its own pacer, the chains that name no stats_url use the Blockscout of the token routes
+	stats := map[string]*sources.Blockscout{}
+	for _, mc := range cfg.Markets.Chains {
+		switch {
+		case !mc.Activity:
+		case mc.StatsURL == "":
+			stats[mc.ID] = blockscout
+		default:
+			stats[mc.ID] = sources.NewBlockscout(mc.StatsURL, cfg.BlockscoutPerSecond)
+		}
+	}
 	a.lists = tokens.NewLists(cfg, sources.NewTokenLists(cfg.TokenListTimeout))
 	a.maps = holdermap.New(cfg.HolderMap, hs, d.Store, d.Logger)
 	a.Service = tokens.New(tokens.Deps{
@@ -96,11 +107,11 @@ func New(d Deps, reg prometheus.Registerer) (*App, error) {
 		HolderMaps: a.maps,
 	})
 	a.marketService = markets.New(markets.Deps{
-		Config:     cfg.Markets,
-		CoinGecko:  sources.NewCoinGecko(cfg.Markets.CoinGeckoURL, cfg.Markets.CoinGeckoKey.Reveal(), cfg.Markets.CoinGeckoGap),
-		Llama:      sources.NewLlama(cfg.Markets.LlamaURL, cfg.Markets.StablecoinsURL, cfg.Markets.LlamaPerMinute),
-		Blockscout: blockscout,
-		Logger:     d.Logger,
+		Config:    cfg.Markets,
+		CoinGecko: sources.NewCoinGecko(cfg.Markets.CoinGeckoURL, cfg.Markets.CoinGeckoKey.Reveal(), cfg.Markets.CoinGeckoGap),
+		Llama:     sources.NewLlama(cfg.Markets.LlamaURL, cfg.Markets.StablecoinsURL, cfg.Markets.LlamaPerMinute),
+		Stats:     stats,
+		Logger:    d.Logger,
 	})
 	paid := func() int64 {
 		var n int64

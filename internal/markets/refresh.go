@@ -24,6 +24,7 @@ var activityLines = []struct {
 	{"activeAccounts", "active_accounts", identity},
 	{"newAccounts", "new_accounts", identity},
 	{"averageGasPrice", "gas_price_gwei", identity},
+	// the fee line is in the chain's gas coin (ETH on Ethereum, USDC on Arc), which the chain's fees_metric names
 	{"txnsFee", "fees_eth", identity},
 	// the stats service sends the mean gas used over the gas limit as a fraction, 0.5 for half full
 	{"networkUtilization", "utilization_pct", func(v float64) float64 { return math.Round(v*1e6) / 1e4 }},
@@ -226,18 +227,16 @@ func buildDex(o sources.DexOverview) dexSet {
 
 // RefreshActivity reads the stats lines of each chain that has them, a year of daily points ending today
 func (s *Service) RefreshActivity(ctx context.Context) error {
-	if s.d.Blockscout == nil {
-		return nil
-	}
 	return s.each(func(c *chainSlots) error {
-		if !c.cfg.Activity {
+		stats := s.d.Stats[c.cfg.ID]
+		if !c.cfg.Activity || stats == nil {
 			return nil
 		}
 		today := s.d.Now().UTC()
 		from, to := today.AddDate(0, 0, -(historyDays-1)).Format(time.DateOnly), today.Format(time.DateOnly)
 		series := make([]Series, 0, len(activityLines))
 		for _, l := range activityLines {
-			pts, err := s.d.Blockscout.StatsLine(ctx, l.id, from, to)
+			pts, err := stats.StatsLine(ctx, l.id, from, to)
 			if err != nil {
 				c.activity.fail(err)
 				return err
@@ -246,7 +245,11 @@ func (s *Service) RefreshActivity(ctx context.Context) error {
 			for _, p := range pts {
 				items = append(items, ValuePoint{Day: p.Day, Value: l.convert(p.Value)})
 			}
-			series = append(series, Series{Metric: l.metric, Items: items})
+			metric := l.metric
+			if metric == "fees_eth" {
+				metric = c.cfg.FeesMetric
+			}
+			series = append(series, Series{Metric: metric, Items: items})
 		}
 		c.activity.set(series, s.d.Now())
 		return nil

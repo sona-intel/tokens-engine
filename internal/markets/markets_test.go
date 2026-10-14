@@ -363,3 +363,28 @@ func TestChainActivity(t *testing.T) {
 		t.Errorf("365: %v", err)
 	}
 }
+
+func TestArcActivity(t *testing.T) {
+	s, _ := fixture.NewMarketsWithArc(t)
+	if err := s.RefreshActivity(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ChainActivity(t.Context(), fixture.Arc, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metrics []string
+	for _, sr := range got.Series {
+		metrics = append(metrics, sr.Metric)
+	}
+	if !slices.Equal(metrics, []string{"txs", "active_accounts", "new_accounts", "gas_price_gwei", "fees_usdc", "utilization_pct"}) {
+		t.Fatalf("metrics %v", metrics)
+	}
+	last := func(i int) markets.ValuePoint { return got.Series[i].Items[len(got.Series[i].Items)-1] }
+	// 2026-10-13 on Arc: 1,276,854 transactions, 21,685 active accounts, 23.59 gwei, 3,600.55 USDC of fees, 2.87% of the gas limit
+	for i, want := range []float64{1276854, 21685, 3766, 23.591709585468244, 3600.554929274452, 2.8690} {
+		if p := last(i); p.Day != "2026-10-13" || p.Value != want {
+			t.Errorf("%s: %v, want 2026-10-13 %v", got.Series[i].Metric, p, want)
+		}
+	}
+}

@@ -134,7 +134,7 @@ All come from DefiLlama's keyless APIs (`api.llama.fi`, `stablecoins.llama.fi`),
 
 ### Activity
 
-`GET /internal/v1/chains/eip155:1/activity` reads Blockscout's stats service (`eth.blockscout.com/stats-service/api/v1/lines/{id}`, `from` 364 days before today to today), six requests an hour through the same Blockscout pacer as the token routes (3 a second, at the background priority). Monad and Arc answer 404 `unsupported_chain` because no source is wired for them.
+`GET /internal/v1/chains/eip155:1/activity` reads Blockscout's stats service (`eth.blockscout.com/stats-service/api/v1/lines/{id}`, `from` 364 days before today to today), six requests an hour through the same Blockscout pacer as the token routes (3 a second, at the background priority). `GET /internal/v1/chains/eip155:5042/activity` reads Arc's own stats service (`explorer.arc.io/stats-service/api/v1/lines/{id}`, keyless; its `/api/v2` is behind Cloudflare but this path is not), the same six lines over the same year, through its own pacer (3 a second) because it is another host. Both are kept an hour. Monad answers 404 `unsupported_chain` because no source is wired for it. Per chain, `activity`, `stats_url` and `fees_metric` in `markets.chains` choose the source and the name of the fee series.
 
 | Metric | Line id | Unit as sent | Output |
 |---|---|---|---|
@@ -144,6 +144,8 @@ All come from DefiLlama's keyless APIs (`api.llama.fi`, `stablecoins.llama.fi`),
 | `gas_price_gwei` | `averageGasPrice` | gwei (the line's `units`) | as sent |
 | `fees_eth` | `txnsFee` | ETH (the line's `units`) | as sent |
 | `utilization_pct` | `networkUtilization` | a fraction, 0.5 for a half full block | times 100, so 50.4 |
+
+On Arc the fee series is `fees_usdc` instead of `fees_eth`: USDC is the gas coin and the line's `units` is `USDC` (3,600.55 on 2026-10-13, summed fees in USDC, as sent). Its `averageGasPrice` has `units` `Gwei` and reads 23.59 on that day, its utilization fraction 0.0287, so `utilization_pct` is 2.87, and `newTxns` 1,276,854, `activeAccounts` 21,685, `newAccounts` 3,766 are counts as on Ethereum.
 
 The utilization line has no unit in the service's description; it was read as a fraction because its days sit at 0.504 and Blockscout's own `/api/v2/stats` and blocks give 52.8% and 54% to 81% on the same day. `days` keeps the last N days.
 
