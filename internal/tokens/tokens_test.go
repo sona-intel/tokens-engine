@@ -634,3 +634,42 @@ func TestALateSourceFillsTheCacheForTheNextCaller(t *testing.T) {
 		t.Errorf("second call count %v coverage %v", second.HolderCount, second.Coverage)
 	}
 }
+
+// HyperSync's visitor share is 2 requests a minute, so a new Ethereum window can take longer than any caller waits
+func TestTransfersEthereumAnswerBeforeASlowWindow(t *testing.T) {
+	svc, f := fixture.Service(t)
+	f.HyperSlow = lateFor
+	ctx, dl := withBudget(t)
+	_, err := svc.Transfers(ctx, fixture.Ethereum, fixture.EthMKR, 5)
+	var ue *sources.UnavailableError
+	if !errors.As(err, &ue) || ue.RetryAfter <= 0 {
+		t.Fatalf("a window still read answered %v, want 503 with a time to come back", err)
+	}
+	if left := time.Until(dl); left < 50*time.Millisecond {
+		t.Errorf("the answer left %s before the deadline", left)
+	}
+	// the read goes on, and the next caller gets the window from the cache
+	time.Sleep(lateFor)
+	ctx, dl = withBudget(t)
+	tr, err := svc.Transfers(ctx, fixture.Ethereum, fixture.EthMKR, 5)
+	answered(t, dl, err)
+	if len(tr.Items) != 5 || f.HyperCalls != 1 {
+		t.Errorf("%d transfers after %d HyperSync pages", len(tr.Items), f.HyperCalls)
+	}
+}
+
+func TestTransfersEthereumServeTheOlderWindowWhileANewOneIsRead(t *testing.T) {
+	svc, f := fixture.ShortTransferCache(t)
+	fresh, err := svc.Transfers(t.Context(), fixture.Ethereum, fixture.EthMKR, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(40 * time.Millisecond)
+	f.HyperSlow = lateFor
+	ctx, dl := withBudget(t)
+	old, err := svc.Transfers(ctx, fixture.Ethereum, fixture.EthMKR, 5)
+	answered(t, dl, err)
+	if !slices.Contains(old.Coverage, "token_transfer_window_older") || *old.Window != *fresh.Window {
+		t.Errorf("coverage %v window %+v", old.Coverage, old.Window)
+	}
+}

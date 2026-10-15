@@ -59,8 +59,10 @@ type Fakes struct {
 	HyperDown  bool
 	// HyperNoTimes drops the block times from the logs, as an incomplete answer would
 	HyperNoTimes bool
-	IndexFull    bool
-	IndexState   string
+	// HyperSlow holds back every HyperSync page for a while
+	HyperSlow  time.Duration
+	IndexFull  bool
+	IndexState string
 	// IndexMode is the mode of the indexed Monad USDC, activity unless a test sets full
 	IndexMode   string
 	HyperCalls  int
@@ -406,11 +408,18 @@ type fakeLogs struct {
 	head uint64
 }
 
-func (l *fakeLogs) Page(_ context.Context, _ string, q sources.LogQuery, _ sources.Priority) (sources.Page, error) {
+func (l *fakeLogs) Page(ctx context.Context, _ string, q sources.LogQuery, _ sources.Priority) (sources.Page, error) {
 	l.f.mu.Lock()
 	l.f.HyperCalls++
-	down, noTimes := l.f.HyperDown, l.f.HyperNoTimes
+	down, noTimes, slow := l.f.HyperDown, l.f.HyperNoTimes, l.f.HyperSlow
 	l.f.mu.Unlock()
+	if slow > 0 {
+		select {
+		case <-time.After(slow):
+		case <-ctx.Done():
+			return sources.Page{}, ctx.Err()
+		}
+	}
 	if down {
 		return sources.Page{}, &sources.UnavailableError{Source: "hypersync", RetryAfter: 20 * time.Second, Err: errors.New("429")}
 	}

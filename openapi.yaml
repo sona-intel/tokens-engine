@@ -104,7 +104,7 @@ info:
     | 503 | `upstream_unavailable` | the chain, the database or the source a route needs did not answer. `retry_after_s` and `Retry-After` say when to try again, from 1 to 60 seconds |
     | 504 | `deadline_exceeded` | the time budget ran out |
 
-    Only the contract read is required for a token record. When the price, Blockscout or GeckoTerminal fails, or has not answered when a tenth of the budget is left (at least 0.2 s, at most 1 s), the record still answers 200: the fields that source feeds are `null`, `sources` leaves it out and `coverage` holds `token_source_unavailable`. A source that answers late fills the engine's cache for the next call. The holder list of Ethereum and the transfer window of Ethereum need their source and answer 503 without it.
+    Only the contract read is required for a token record. When the price, Blockscout or GeckoTerminal fails, or has not answered when a tenth of the budget is left (at least 0.2 s, at most 1 s), the record still answers 200: the fields that source feeds are `null`, `sources` leaves it out and `coverage` holds `token_source_unavailable`. A source that answers late fills the engine's cache for the next call. The holder list of Ethereum and the transfer window of Ethereum need their source and answer 503 without it. A new Ethereum window that HyperSync has not delivered when a tenth of the budget is left answers the last good window with `token_transfer_window_older`, or 503 with `retry_after_s` while the read goes on for the next call.
 
     ## How this differs from the public API
 

@@ -20,6 +20,9 @@ const MaxTransfers = 100
 // pauseMargin is the time a read takes after the HyperSync pause ends
 const pauseMargin = 5 * time.Second
 
+// readingRetry is when to ask again for a window that is still being read
+const readingRetry = 15 * time.Second
+
 // learnedTTL is how long a shorter window that a busy token needed is reused before the default is tried again
 const learnedTTL = 6 * time.Hour
 
@@ -132,10 +135,16 @@ func (s *Service) hyperSyncWindow(ctx context.Context, out *Transfers, cfg confi
 			}
 		}
 	}
-	w, err := s.windows.Get(ctx, key, ttl, fetch)
+	// HyperSync can take longer than the caller waits, the read then goes on and fills the cache for the next caller
+	octx, cancel := optional(ctx)
+	defer cancel()
+	w, err := s.windows.Get(octx, key, ttl, fetch)
 	if err != nil {
 		if g, ok := older(); ok {
 			return serve(g, CovWindowOlder)
+		}
+		if octx.Err() != nil && ctx.Err() == nil {
+			return &sources.UnavailableError{Source: SourceHyperSync, RetryAfter: s.d.Logs.PausedFor() + readingRetry, Err: errors.New("the transfer window is still being read")}
 		}
 		return err
 	}
