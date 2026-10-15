@@ -27,6 +27,9 @@ const (
 	headerTTL    = time.Hour
 	fetchTimeout = 60 * time.Second
 	cacheEntries = 4096
+	// spareMin and spareMax bound what a record keeps of the caller's budget after its optional sources
+	spareMin = 200 * time.Millisecond
+	spareMax = time.Second
 )
 
 // Chain is the JSON-RPC client of one chain
@@ -238,6 +241,38 @@ func (s *Service) Decimals(chain string) func(context.Context, evm.Address) (uin
 	}
 }
 
+/* Optional sources */
+
+// optional ends a tenth of the budget before the caller's deadline, so a late source leaves its fields null instead of failing the record
+func optional(ctx context.Context) (context.Context, context.CancelFunc) {
+	dl, ok := ctx.Deadline()
+	if !ok {
+		return context.WithCancel(ctx)
+	}
+	spare := min(max(time.Until(dl)/10, spareMin), spareMax)
+	return context.WithDeadline(ctx, dl.Add(-spare))
+}
+
+type result[V any] struct {
+	v   V
+	err error
+}
+
+// later starts an optional read beside the caller's other reads and returns a wait for its answer
+func later[V any](ctx context.Context, read func(context.Context) (V, error)) func() (V, error) {
+	octx, cancel := optional(ctx)
+	ch := make(chan result[V], 1)
+	go func() {
+		defer cancel()
+		v, err := read(octx)
+		ch <- result[V]{v, err}
+	}()
+	return func() (V, error) {
+		r := <-ch
+		return r.v, r.err
+	}
+}
+
 /* Shared reads */
 
 func (s *Service) currentPrice(ctx context.Context, chain string, token evm.Address) (*float64, error) {
@@ -335,6 +370,8 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 		Decimals: int(meta.Decimals), TotalSupply: NewAmount(meta.TotalSupply, meta.Decimals), Sources: []string{SourceRPC},
 	}
 
+	octx, cancel := optional(ctx)
+	defer cancel()
 	var (
 		wg                   sync.WaitGroup
 		price, mcap          *float64
@@ -345,10 +382,10 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 		indexCount           *int64
 		providerLogo         *string
 	)
-	wg.Go(func() { price, priceErr = s.currentPrice(ctx, chain, token) })
+	wg.Go(func() { price, priceErr = s.currentPrice(octx, chain, token) })
 	if cfg.Holders == config.HoldersBlockscout {
 		wg.Go(func() {
-			t, err := s.blockscoutToken(ctx, token)
+			t, err := s.blockscoutToken(octx, token)
 			if errors.Is(err, sources.ErrNotFound) {
 				err = nil
 			}
@@ -358,7 +395,7 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 			}
 		})
 		wg.Go(func() {
-			page, err := s.blockscoutHolders(ctx, token, nil)
+			page, err := s.blockscoutHolders(octx, token, nil)
 			if errors.Is(err, sources.ErrNotFound) {
 				err = nil
 			}
@@ -369,7 +406,7 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 		})
 	} else {
 		wg.Go(func() {
-			h, err := s.geckoHolders(ctx, cfg.GeckoNetwork, token)
+			h, err := s.geckoHolders(octx, cfg.GeckoNetwork, token)
 			if errors.Is(err, sources.ErrNotFound) {
 				err = nil
 			}
@@ -377,14 +414,14 @@ func (s *Service) Info(ctx context.Context, chain string, token evm.Address) (In
 			count, top10, providerLogo = h.Count, h.Top10Share, h.ImageURL
 		})
 		wg.Go(func() {
-			v, err := s.geckoCap(ctx, cfg.GeckoNetwork, token)
+			v, err := s.geckoCap(octx, cfg.GeckoNetwork, token)
 			if errors.Is(err, sources.ErrNotFound) {
 				err = nil
 			}
 			mcap, mcapErr = v, err
 		})
 		wg.Go(func() {
-			if t, ok, err := s.d.Indexes[chain].Lookup(ctx, token); err == nil && ok && t.State == store.StateReady && t.Mode == store.ModeFull {
+			if t, ok, err := s.d.Indexes[chain].Lookup(octx, token); err == nil && ok && t.State == store.StateReady && t.Mode == store.ModeFull {
 				indexCount = &t.Holders
 			}
 		})

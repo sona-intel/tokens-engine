@@ -1,6 +1,7 @@
 package tokens_test
 
 import (
+	"context"
 	"encoding/json/v2"
 	"errors"
 	"math"
@@ -533,5 +534,103 @@ func TestHolderMapArcUSDC(t *testing.T) {
 		if want := native[n.Address]; want == nil || n.Balance != tokens.FormatUnits(want, 6) || n.Kind != "unknown" {
 			t.Errorf("node %+v, native balance %v", n, want)
 		}
+	}
+}
+
+/* A source that answers late */
+
+// budget is a caller's deadline like sona-api's, and lateFor holds a source back past it
+const (
+	budget  = 800 * time.Millisecond
+	lateFor = 1500 * time.Millisecond
+)
+
+func withBudget(t *testing.T) (context.Context, time.Time) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), budget)
+	t.Cleanup(cancel)
+	dl, _ := ctx.Deadline()
+	return ctx, dl
+}
+
+// answered fails when the record left after the caller's deadline, which the caller sees as a timeout
+func answered(t *testing.T, deadline time.Time, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("a late optional source failed the record: %v", err)
+	}
+	if left := time.Until(deadline); left < 50*time.Millisecond {
+		t.Errorf("the record left %s before the deadline", left)
+	}
+}
+
+func TestHoldersEthereumAnswersWithoutALateHolderCount(t *testing.T) {
+	svc, f := fixture.Service(t)
+	f.SetSlow("/api/v2/tokens/"+fixture.EthUSDC.String(), lateFor)
+	ctx, dl := withBudget(t)
+	h, err := svc.Holders(ctx, fixture.Ethereum, fixture.EthUSDC, 10, "")
+	answered(t, dl, err)
+	if len(h.Items) != 10 || h.HolderCount != nil || !slices.Equal(h.Coverage, []string{"token_source_unavailable", "token_holders_ranked_by_provider"}) {
+		t.Errorf("holders %d items, count %v, coverage %v", len(h.Items), h.HolderCount, h.Coverage)
+	}
+}
+
+func TestHoldersIndexAnswersWithoutALateGeckoCount(t *testing.T) {
+	svc, f := fixture.WithArc(t)
+	f.SetSlow("/networks/monad/tokens/"+fixture.MonUSDC.String()+"/info", lateFor)
+	f.SetSlow("/networks/arc/tokens/"+fixture.ArcUSDC.String()+"/info", lateFor)
+	for _, c := range []struct {
+		chain string
+		token evm.Address
+	}{{fixture.Monad, fixture.MonUSDC}, {fixture.Arc, fixture.ArcUSDC}} {
+		ctx, dl := withBudget(t)
+		h, err := svc.Holders(ctx, c.chain, c.token, 5, "")
+		answered(t, dl, err)
+		if len(h.Items) != 5 || h.Index == nil || h.HolderCount != nil || !slices.Contains(h.Coverage, "token_source_unavailable") || slices.Contains(h.Coverage, "token_holder_count_provider") {
+			t.Errorf("%s holders %d items, count %v, coverage %v", c.chain, len(h.Items), h.HolderCount, h.Coverage)
+		}
+	}
+}
+
+func TestInfoAnswersWithoutLateSources(t *testing.T) {
+	svc, f := fixture.Service(t)
+	f.SetSlow("/networks/monad/tokens/"+fixture.MonUSDC.String()+"/info", lateFor)
+	f.SetSlow("/internal/v1/chains/eip155:143/tokens/"+fixture.MonUSDC.String()+"/prices", lateFor)
+	ctx, dl := withBudget(t)
+	info, err := svc.Info(ctx, fixture.Monad, fixture.MonUSDC)
+	answered(t, dl, err)
+	// the market cap answered in time, the price and the holder figures did not
+	if *info.Symbol != "USDC" || info.PriceUSD != nil || info.HolderCount != nil || info.Top10Share != nil || info.MarketCapUSD == nil {
+		t.Errorf("info %+v", info)
+	}
+	if !slices.Equal(info.Sources, []string{"rpc", "geckoterminal"}) || !slices.Equal(info.Coverage, []string{"token_source_unavailable"}) {
+		t.Errorf("sources %v coverage %v", info.Sources, info.Coverage)
+	}
+
+	f.SetSlow("/api/v2/tokens/"+fixture.EthUSDC.String()+"/holders", lateFor)
+	ctx, dl = withBudget(t)
+	eth, err := svc.Info(ctx, fixture.Ethereum, fixture.EthUSDC)
+	answered(t, dl, err)
+	if eth.HolderCount == nil || eth.Top10Share != nil || !slices.Contains(eth.Coverage, "token_source_unavailable") {
+		t.Errorf("Ethereum info count %v top10 %v coverage %v", eth.HolderCount, eth.Top10Share, eth.Coverage)
+	}
+}
+
+// the read a late source started keeps going, so the next caller gets the full record from the cache
+func TestALateSourceFillsTheCacheForTheNextCaller(t *testing.T) {
+	svc, f := fixture.Service(t)
+	f.SetSlow("/api/v2/tokens/"+fixture.EthUSDC.String(), budget)
+	ctx, dl := withBudget(t)
+	first, err := svc.Holders(ctx, fixture.Ethereum, fixture.EthUSDC, 10, "")
+	answered(t, dl, err)
+	if first.HolderCount != nil {
+		t.Fatal("the late count was waited for")
+	}
+	time.Sleep(time.Until(dl) + 200*time.Millisecond)
+	ctx, dl = withBudget(t)
+	second, err := svc.Holders(ctx, fixture.Ethereum, fixture.EthUSDC, 10, "")
+	answered(t, dl, err)
+	if second.HolderCount == nil || *second.HolderCount != 9485913 || slices.Contains(second.Coverage, "token_source_unavailable") {
+		t.Errorf("second call count %v coverage %v", second.HolderCount, second.Coverage)
 	}
 }

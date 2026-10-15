@@ -111,11 +111,12 @@ func (s *Service) Holders(ctx context.Context, chain string, token evm.Address, 
 func (s *Service) blockscoutPage(ctx context.Context, out *Holders, token evm.Address, meta Meta, limit int, c cursor) error {
 	out.Source = SourceBlockscout
 	notes := []Note{CovHoldersPartial}
+	count := later(ctx, func(ctx context.Context) (sources.BlockscoutToken, error) { return s.blockscoutToken(ctx, token) })
 	var err error
 	if out.Items, out.NextCursor, err = s.blockscoutList(ctx, token, meta, limit, c); err != nil {
 		return err
 	}
-	t, err := s.blockscoutToken(ctx, token)
+	t, err := count()
 	switch {
 	case err == nil:
 		out.HolderCount = t.HoldersCount
@@ -193,6 +194,13 @@ func (s *Service) indexPage(ctx context.Context, out *Holders, cfg config.Chain,
 	case IndexQueued, IndexIndexing:
 		notes = append(notes, CovIndexPartial)
 	}
+	// only a complete index counts its own holders, the provider's count is read beside the rows
+	var count func() (sources.GeckoHolders, error)
+	if t == nil || t.State != store.StateReady || t.Mode != store.ModeFull {
+		count = later(ctx, func(ctx context.Context) (sources.GeckoHolders, error) {
+			return s.geckoHolders(ctx, cfg.GeckoNetwork, token)
+		})
+	}
 	if t != nil {
 		if t.Mode == store.ModeActivity {
 			notes = append(notes, CovFromActivity)
@@ -222,8 +230,8 @@ func (s *Service) indexPage(ctx context.Context, out *Holders, cfg config.Chain,
 			out.HolderCount = &t.Holders
 		}
 	}
-	if out.HolderCount == nil {
-		h, err := s.geckoHolders(ctx, cfg.GeckoNetwork, token)
+	if count != nil {
+		h, err := count()
 		switch {
 		case err == nil:
 			if h.Count != nil {

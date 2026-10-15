@@ -67,6 +67,8 @@ type Fakes struct {
 	EnsureCalls int
 	// NativeCalls counts the getEthBalance batches the Arc chain answered
 	NativeCalls int
+	// Slow holds back the answers to a path for a while
+	Slow map[string]time.Duration
 
 	// Maps builds the holder maps from MapLogs into MapStore, BuildMaps runs its queue
 	Maps      *holdermap.Builder
@@ -79,6 +81,22 @@ func (f *Fakes) get(fn func(*Fakes) bool) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return fn(f)
+}
+
+// SetSlow holds back every answer to path for d
+func (f *Fakes) SetSlow(path string, d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Slow == nil {
+		f.Slow = map[string]time.Duration{}
+	}
+	f.Slow[path] = d
+}
+
+func (f *Fakes) slowFor(path string) time.Duration {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Slow[path]
 }
 
 // Service returns a service on recorded answers: contract reads, Blockscout, GeckoTerminal and prices for
@@ -272,6 +290,13 @@ func serve(t testing.TB, f *Fakes, routes map[string]string, down func(*Fakes) b
 		if down != nil && f.get(down) {
 			w.WriteHeader(http.StatusBadGateway)
 			return
+		}
+		if d := f.slowFor(r.URL.Path); d > 0 {
+			select {
+			case <-time.After(d):
+			case <-r.Context().Done():
+				return
+			}
 		}
 		key := r.URL.Path
 		if r.URL.RawQuery != "" {
