@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -426,18 +427,80 @@ func TestArcUSDCActivityReadsNativeBalances(t *testing.T) {
 	}
 }
 
-type hangingLogs struct{ fakeLogs }
-
-func (*hangingLogs) Height(ctx context.Context, _ string) (uint64, error) {
-	<-ctx.Done()
-	return 0, ctx.Err()
+// slowHeight answers each Height once release gets a value, and counts the reads
+type slowHeight struct {
+	fakeLogs
+	release chan uint64
+	reads   atomic.Int32
 }
 
-// the first HyperSync connection can take 10 seconds, a visitor must not wait for it
-func TestHeadGivesUpQuickly(t *testing.T) {
-	x := New(config.Chain{ID: "eip155:143"}, config.Index{}, nil, &hangingLogs{}, nil, slog.Default())
+func (s *slowHeight) Height(ctx context.Context, _ string) (uint64, error) {
+	s.reads.Add(1)
+	select {
+	case h := <-s.release:
+		return h, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+func waitFor(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// a new HyperSync connection took 6 seconds, a visitor's request must not wait for the height at all
+func TestHeadNeverWaitsForHyperSync(t *testing.T) {
+	logs := &slowHeight{release: make(chan uint64)}
+	x := New(config.Chain{ID: monad}, config.Index{}, nil, logs, nil, slog.Default())
+	now := time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)
+	x.now = func() time.Time { return now }
+
 	start := time.Now()
-	if h := x.Head(t.Context()); h != 0 || time.Since(start) > 5*time.Second {
-		t.Fatalf("head %d after %v", h, time.Since(start))
+	for range 5 {
+		if h := x.Head(t.Context()); h != 0 {
+			t.Fatalf("head %d before HyperSync answered", h)
+		}
+	}
+	if took := time.Since(start); took > 100*time.Millisecond {
+		t.Errorf("five calls took %s", took)
+	}
+	// the calls share one read in the background, which lands for the next caller
+	waitFor(t, "the background read", func() bool { return logs.reads.Load() == 1 })
+	logs.release <- 113_000_000
+	waitFor(t, "the height", func() bool { return x.Head(t.Context()) == 113_000_000 })
+	if n := logs.reads.Load(); n != 1 {
+		t.Errorf("%d reads of the height, want 1", n)
+	}
+
+	// an old copy is answered at once while the next read runs
+	now = now.Add(time.Minute)
+	if h := x.Head(t.Context()); h != 113_000_000 {
+		t.Errorf("head %d while the copy is read again", h)
+	}
+	waitFor(t, "the second read", func() bool { x.Head(t.Context()); return logs.reads.Load() == 2 })
+	logs.release <- 113_000_150
+	waitFor(t, "the new height", func() bool { return x.Head(t.Context()) == 113_000_150 })
+}
+
+func TestHeadDoesNotReadAFreshCopyAgain(t *testing.T) {
+	logs := &fakeLogs{head: 26_000_000}
+	x := New(config.Chain{ID: arc}, config.Index{}, nil, logs, nil, slog.Default())
+	if _, err := x.height(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if h := x.Head(t.Context()); h != 26_000_000 {
+			t.Fatalf("head %d", h)
+		}
+	}
+	if x.reading.Load() {
+		t.Error("a fresh copy started a read")
 	}
 }

@@ -25,8 +25,8 @@ const (
 	pruneEvery = time.Hour
 	// overPages is how many pages in a row must project past the budget, so one busy day does not end a full backfill
 	overPages = 2
-	// headWait is the longest a visitor's request waits for the archive height before it answers without it
-	headWait = 1500 * time.Millisecond
+	// headRead bounds the background read of the archive height that a visitor's Head starts
+	headRead = 30 * time.Second
 )
 
 // Logs is the HyperSync client
@@ -63,6 +63,8 @@ type Indexer struct {
 
 	wake    chan struct{}
 	current atomic.Pointer[Progress]
+	// reading is set while a read of the archive height that Head started runs
+	reading atomic.Bool
 
 	mu       sync.Mutex
 	head     uint64
@@ -102,16 +104,18 @@ func (x *Indexer) Ensure(ctx context.Context, token evm.Address, decimals uint8)
 // Current is the running backfill, nil when none runs
 func (x *Indexer) Current() *Progress { return x.current.Load() }
 
-// Head is the last archive height HyperSync reported, it asks again when the copy is old
+// Head is the last archive height HyperSync reported, 0 before the first, and an old copy is read again in the background so no caller waits
 func (x *Indexer) Head(ctx context.Context) uint64 {
-	// a visitor's request never waits long for the height: the first call to HyperSync can take 10 seconds to connect
-	ctx, cancel := context.WithTimeout(ctx, headWait)
-	defer cancel()
-	h, err := x.height(ctx)
-	if err != nil {
-		x.mu.Lock()
-		defer x.mu.Unlock()
-		return x.head
+	x.mu.Lock()
+	h, fresh := x.head, x.head > 0 && x.now().Sub(x.headAt) < heightTTL
+	x.mu.Unlock()
+	if !fresh && x.reading.CompareAndSwap(false, true) {
+		go func() {
+			defer x.reading.Store(false)
+			rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), headRead)
+			defer cancel()
+			_, _ = x.height(rctx)
+		}()
 	}
 	return h
 }
