@@ -55,7 +55,7 @@ func (e *StatusError) Error() string {
 func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 func newHTTPClient(timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout, CheckRedirect: noRedirect}
+	return &http.Client{Timeout: timeout, CheckRedirect: noRedirect, Transport: transport}
 }
 
 func statusError(resp *http.Response) *StatusError {

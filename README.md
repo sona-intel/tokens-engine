@@ -36,6 +36,8 @@ The engine only reads. It holds no wallet or private key and signs nothing. Its 
 | Blockscout stats services (`eth.blockscout.com/stats-service`, same pacer as Blockscout, and `explorer.arc.io/stats-service`, its own pacer) | the daily activity of Ethereum and Arc |
 | Postgres | the indexes of Monad and Arc (a `chain` column, one set of tables): indexed tokens, current balances, the largest transfers of each day of the last 7; the links of holder maps (`holder_map`, 7 days); Monad's activity by day and the cursor of its count (`chain_stats_day`, `chain_stats_cursor`) |
 
+Every HTTP source above but the RPC router connects through one HTTP transport that tries a host's addresses side by side, 250 ms apart, and keeps the first that answers. On 2026-10-15 one of the five addresses of `*.hypersync.xyz` (`193.32.220.135`) took no connection, the stack's DNS listed it first every time, and Go's own dialer spent 6 seconds on it before every new connection.
+
 ### The HyperSync quota
 
 The key allows 15 requests a minute, shared with Sona's x402 indexer, which spends most of each minute within seconds of its start. The engine keeps to 3 requests a minute for the indexes of Monad and Arc together and 2 for visitors (`hypersync_per_minute`, `hypersync_interactive_per_minute`); the visitors' 2 also carry the holder map reads, which run in the background, one at a time, at most 8 requests each. It reads the quota headers of every answer: when a window is spent it waits until a second after the reset and then sends its share at once. A 429 waits the same way.
