@@ -2,6 +2,7 @@ package markets_test
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"slices"
@@ -464,6 +465,46 @@ func TestActivityCountedFromBlocksIsStaleWhenTheCountFallsBehind(t *testing.T) {
 		}
 		if !slices.Equal(got.Coverage, want) {
 			t.Errorf("%s behind: coverage %v", behind, got.Coverage)
+		}
+	}
+}
+
+// Arc on 2026-10-15: the chart's last day was 598,511,772 while USDC alone already stood above it. The recorded chart is cut to that day
+func TestChainStablecoinsTotalNeverBelowCoins(t *testing.T) {
+	chart := load[[]jsontext.Value](t, "llama/stablecharts.arc.json")
+	cut, err := json.Marshal(chart[:len(chart)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := fixture.NewMarketsWithArcStablecoins(t, cut)
+	if err := s.RefreshStablecoins(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ChainStablecoins(t.Context(), fixture.Arc)
+	if err != nil || len(got.Items) != 1 || got.Items[0].Symbol != "USDC" {
+		t.Fatalf("%v %+v", err, got.Items)
+	}
+	if got.History[len(got.History)-1].TotalUSD != 598511772 {
+		t.Fatalf("history %+v", got.History[len(got.History)-1])
+	}
+	if got.TotalUSD != got.Items[0].CirculatingUSD || got.Items[0].CirculatingUSD <= 598511772 {
+		t.Errorf("total %v against USDC %v", got.TotalUSD, got.Items[0].CirculatingUSD)
+	}
+}
+
+func TestChainStablecoinsShareAtMostWhole(t *testing.T) {
+	s, _ := fixture.Markets(t)
+	for _, chain := range []string{fixture.Monad, fixture.Ethereum} {
+		got, err := s.ChainStablecoins(t.Context(), chain)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := 0.0
+		for _, it := range got.Items {
+			sum += it.CirculatingUSD
+		}
+		if got.TotalUSD < sum {
+			t.Errorf("%s: total %v below its listed coins %v", chain, got.TotalUSD, sum)
 		}
 	}
 }

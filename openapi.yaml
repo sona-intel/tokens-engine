@@ -453,7 +453,7 @@ paths:
       tags: [Markets]
       summary: Get the stablecoins circulating on a chain
       description: |
-        Call this for the USD-pegged stablecoins on a chain: the 15 largest by circulating dollars, and the daily total supply over the last 365 days. `total_usd` is the last point of `history` (DefiLlama's stablecoin chart), which counts every stablecoin of the chain, so it can be above the sum of `items`. The last history item is the current UTC day. Read from DefiLlama every hour.
+        Call this for the USD-pegged stablecoins on a chain: the 15 largest by circulating dollars, and the daily total supply over the last 365 days. `total_usd` is the larger of the last point of `history` (DefiLlama's stablecoin chart) and the sum of every USD-pegged stablecoin of the chain from DefiLlama's coin list, not only the listed ones, so it is never below the sum of `items` and a coin's share of it is at most 100%. It can be above that sum, because the chart counts more. The two DefiLlama datasets move at different times, so `total_usd` can be above the last point of `history`. The last history item is the current UTC day. Read from DefiLlama every hour.
       responses:
         "200":
           description: The record.
@@ -1157,7 +1157,7 @@ components:
       properties:
         kind: {type: string, enum: [chain_stablecoins]}
         chain: {$ref: '#/components/schemas/Chain'}
-        total_usd: {type: number, description: "The last point of `history`."}
+        total_usd: {type: number, description: "The larger of the last point of `history` and the sum of every USD-pegged stablecoin of the chain. Never below the sum of `items`."}
         items:
           type: array
           description: The 15 largest USD-pegged stablecoins on the chain, largest first.

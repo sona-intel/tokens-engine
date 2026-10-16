@@ -67,6 +67,7 @@ type protocolSet struct {
 }
 
 type stableSet struct {
+	total   float64
 	items   []Stablecoin
 	history []StablePoint
 }

@@ -180,8 +180,15 @@ func buildStable(list []sources.Stablecoin, chart []sources.StablePoint) stableS
 	})
 	chart = slices.Clone(chart)
 	slices.SortFunc(chart, func(a, b sources.StablePoint) int { return cmp.Compare(a.Date, b.Date) })
+	// The chart and the per-coin figures are two DefiLlama datasets that move at different times, so either can be ahead: the total
+	// is the larger of the chart's last day and the sum of every coin (not only the listed ones), and no coin is above 100% of it
+	coins := 0.0
+	for _, c := range items {
+		coins += c.CirculatingUSD
+	}
 	chart = chart[max(0, len(chart)-historyDays):]
 	out := stableSet{items: items[:min(len(items), topLists)], history: make([]StablePoint, 0, len(chart))}
+	out.total = cents(max(coins, chart[len(chart)-1].Total))
 	for _, p := range chart {
 		out.history = append(out.history, StablePoint{Day: day(p.Date), TotalUSD: p.Total})
 	}

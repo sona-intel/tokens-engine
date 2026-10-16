@@ -134,11 +134,7 @@ func (s *Service) ChainStablecoins(_ context.Context, chain string) (ChainStable
 	if !ok {
 		return ChainStablecoins{}, unavailable(sourceDefiLlama, lerr)
 	}
-	out := ChainStablecoins{Kind: KindChainStable, Chain: chain, Items: slices.Clone(set.items), History: slices.Clone(set.history), Coverage: codes(s.defiNotes(at, CovLastDayPartial)...)}
-	if n := len(set.history); n > 0 {
-		out.TotalUSD = set.history[n-1].TotalUSD
-	}
-	return out, nil
+	return ChainStablecoins{Kind: KindChainStable, Chain: chain, TotalUSD: set.total, Items: slices.Clone(set.items), History: slices.Clone(set.history), Coverage: codes(s.defiNotes(at, CovLastDayPartial)...)}, nil
 }
 
 // ChainDexVolume answers a chain's DEX volume over the last days days

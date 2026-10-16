@@ -77,6 +77,9 @@ def llama():
         a["chainCirculating"] = {c: v for c, v in a["chainCirculating"].items() if c in ("Monad", "Ethereum")}
         out.append(a)
     save("llama/stablecoins.json", {"peggedAssets": out})
+    arc = get("https://stablecoins.llama.fi/stablecoincharts/Arc")
+    save("llama/stablecharts.arc.json", [{"date": c["date"], "totalCirculatingUSD": {"peggedUSD": c["totalCirculatingUSD"].get("peggedUSD")}} for c in arc[-400:]])
+    save("llama/stablecoins.arc.json", {"peggedAssets": [dict(a, chainCirculating={"Arc": a["chainCirculating"]["Arc"]}) for a in assets if "Arc" in a["chainCirculating"]]})
 
 
 def stats():

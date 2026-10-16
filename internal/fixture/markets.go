@@ -2,6 +2,7 @@ package fixture
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,13 +90,13 @@ func NewMarkets(t testing.TB) (*markets.Service, *MarketFakes) {
 // NewMarketsWithKey is NewMarkets with a CoinGecko demo key, which every CoinGecko request must carry
 func NewMarketsWithKey(t testing.TB, key string) (*markets.Service, *MarketFakes) {
 	t.Helper()
-	return newMarkets(t, key, false, nil)
+	return newMarkets(t, key, false, nil, nil)
 }
 
 // NewMarketsWithMonadCount is NewMarkets with Monad's activity counted from its blocks by count, as the engine's config has it
 func NewMarketsWithMonadCount(t testing.TB, count markets.StatsSource) (*markets.Service, *MarketFakes) {
 	t.Helper()
-	return newMarkets(t, "", false, count)
+	return newMarkets(t, "", false, count, nil)
 }
 
 // MonadLines answers the lines a count of Monad's blocks keeps, the same value on the day before Now and on Now's day, counted to 10 minutes before Now
@@ -116,16 +117,26 @@ func (MonadLines) CountedTo(context.Context) (time.Time, error) {
 // NewMarketsWithArc is NewMarkets with Arc added as a chain that has activity only: refresh its activity alone, no DeFi recording covers Arc
 func NewMarketsWithArc(t testing.TB) (*markets.Service, *MarketFakes) {
 	t.Helper()
-	return newMarkets(t, "", true, nil)
+	return newMarkets(t, "", true, nil, nil)
 }
 
-func newMarkets(t testing.TB, key string, arc bool, monad markets.StatsSource) (*markets.Service, *MarketFakes) {
+// NewMarketsWithArcStablecoins is NewMarketsWithArc with the stablecoin list of Arc's coins alone and chart as Arc's stablecoin chart, for the DeFi stablecoin refresh only
+func NewMarketsWithArcStablecoins(t testing.TB, chart []byte) (*markets.Service, *MarketFakes) {
+	t.Helper()
+	return newMarkets(t, "", true, nil, map[string][]byte{
+		"/stable/stablecoins":          testkit.Read(t, "llama/stablecoins.arc.json"),
+		"/stable/stablecoincharts/Arc": chart,
+	})
+}
+
+func newMarkets(t testing.TB, key string, arc bool, monad markets.StatsSource, replace map[string][]byte) (*markets.Service, *MarketFakes) {
 	t.Helper()
 	f := &MarketFakes{now: Now, Requests: map[string]int{}, CoinKey: key}
 	files := map[string][]byte{}
 	for path, file := range marketRoutes {
 		files[path] = testkit.Read(t, file)
 	}
+	maps.Copy(files, replace)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		down, status := f.Down, f.BadStatus[r.URL.Path]
